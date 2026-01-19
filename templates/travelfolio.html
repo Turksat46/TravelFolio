@@ -3,143 +3,79 @@
 <head>
     <meta charset="utf-8">
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
-    <title>TravelFolio 3D - Desktop Edition</title>
+    <title>TravelFolio 3D - Flight Search Edition</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
 
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,1,0" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
 
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #020617;
-            margin: 0;
-            overflow: hidden;
-            color: white;
-        }
+        body { font-family: 'Inter', sans-serif; background-color: #020617; margin: 0; overflow: hidden; color: white; }
+        #app-container { width: 100vw; height: 100vh; position: relative; background-color: #0f172a; overflow: hidden; }
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; background: radial-gradient(circle at center, #1e293b 0%, #020617 100%); }
 
-        #app-container {
-            width: 100vw;
-            height: 100vh;
-            position: relative;
-            background-color: #0f172a;
-            overflow: hidden;
-        }
-
-        #canvas-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 0;
-            background: radial-gradient(circle at center, #1e293b 0%, #020617 100%);
-        }
-
-        .ui-layer {
-            position: absolute;
-            z-index: 10;
-            pointer-events: none;
-            width: 100%;
-            height: 100%;
-        }
-
-        .content-limit {
-            max-width: 1200px;
-            margin: 0 auto;
-            width: 100%;
-            height: 100%;
-            position: relative;
-        }
-
+        .ui-layer { position: absolute; z-index: 10; pointer-events: none; width: 100%; height: 100%; }
+        .content-limit { max-width: 1200px; margin: 0 auto; width: 100%; height: 100%; position: relative; }
         .interactive { pointer-events: auto; }
 
-        .glass {
-            background: rgba(15, 23, 42, 0.7);
-            backdrop-filter: blur(20px);
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .glass-card {
-            background: rgba(30, 41, 59, 0.4);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            transition: all 0.3s ease;
-        }
+        .glass { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(20px); border-top: 1px solid rgba(255, 255, 255, 0.1); }
+        .glass-card { background: rgba(30, 41, 59, 0.45); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3); transition: all 0.3s ease; }
         .glass-card:hover { transform: translateY(-2px); background: rgba(30, 41, 59, 0.6); }
 
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-        #detail-sheet {
-            position: absolute;
-            right: 24px;
-            top: 100px;
-            bottom: 100px;
-            width: 420px;
-            z-index: 50;
-            background: rgba(15, 23, 42, 0.95);
-            backdrop-filter: blur(20px);
-            border-radius: 24px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            transform: translateX(125%);
-            transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-            box-shadow: -20px 0 50px rgba(0,0,0,0.5);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
+        #detail-sheet { position: absolute; right: 24px; top: 100px; bottom: 100px; width: 420px; z-index: 50; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(20px); border-radius: 24px; border: 1px solid rgba(255, 255, 255, 0.1); transform: translateX(125%); transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: -20px 0 50px rgba(0,0,0,0.5); display: flex; flex-direction: column; overflow: hidden; }
         #detail-sheet.open { transform: translateX(0); }
 
-        .marker-label { position: absolute; background: rgba(0, 0, 0, 0.8); color: white; padding: 6px 12px; border-radius: 8px; font-size: 12px; pointer-events: none; opacity: 0; transition: opacity 0.2s; transform: translate(-50%, -150%); white-space: nowrap; border: 1px solid rgba(34, 211, 238, 0.3); z-index: 20; }
-        .modal-bg { background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); }
+        .modal-bg { background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); }
+        .search-input { width: 100%; background: #1e293b; padding: 0.85rem; border-radius: 0.75rem; border: 1px solid #334155; color: white; outline: none; transition: all 0.2s; font-size: 0.9rem; }
+        .search-input:focus { border-color: #22d3ee; box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.2); }
 
-        .search-input { width: 100%; background: #1e293b; padding: 1rem; border-radius: 0.75rem; border: 1px solid #334155; color: white; outline: none; transition: border-color 0.2s; }
-        .search-input:focus { border-color: #22d3ee; }
-        .flight-result-card { background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; padding: 1rem; border-radius: 1rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s; }
-        .flight-result-card:hover { background: rgba(30, 41, 59, 0.6); border-color: #475569; }
+        .passenger-counter { display: flex; align-items: center; justify-content: space-between; background: #0f172a; padding: 0.5rem 1rem; border-radius: 0.75rem; border: 1px solid #334155; }
+        .counter-btn { width: 28px; height: 28px; border-radius: 50%; background: #1e293b; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s; }
+        .counter-btn:hover { background: #334155; }
+
+        .flight-result-card { background: rgba(30, 41, 59, 0.6); border: 1px solid #334155; padding: 1.25rem; border-radius: 1.25rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s; }
+        .flight-result-card:hover { border-color: #22d3ee; background: rgba(30, 41, 59, 0.8); }
+
+        .loading-ring { border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid #22d3ee; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 
 <div id="app-container">
     <div id="canvas-container"></div>
-    <div id="marker-label" class="marker-label">Label</div>
 
-    <!-- Header -->
+    <!-- Header UI -->
     <div class="absolute top-0 left-0 right-0 z-40 pt-8 pb-4 px-8 bg-gradient-to-b from-slate-900/90 to-transparent pointer-events-none">
         <div class="content-limit flex justify-between items-center">
             <div class="flex items-center gap-4 pointer-events-auto cursor-pointer" onclick="switchView('home')">
-                <img src="{{ url_for('static', filename='logo.png') }}"
-                     class="w-12 h-12 rounded-xl shadow-lg shadow-cyan-500/20 border border-white/10 hover:scale-105 transition transform object-cover bg-slate-800"
-                     alt="TF"
-                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
-
-                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 hidden">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
                     <span class="material-symbols-outlined text-white">flight_takeoff</span>
                 </div>
-                <span class="text-2xl font-bold tracking-tight text-white drop-shadow-md">TravelFolio</span>
+                <span class="text-2xl font-black tracking-tighter text-white uppercase">TravelFolio</span>
             </div>
             <button onclick="toggleNotifications()" class="relative w-12 h-12 rounded-full bg-white/5 flex items-center justify-center backdrop-blur-md pointer-events-auto hover:bg-white/10 transition border border-white/10">
                 <span class="material-symbols-outlined text-slate-200">notifications</span>
-                <span id="notif-badge" class="absolute top-3 right-3 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-900"></span>
+                <span id="notif-badge" class="absolute top-3 right-3 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-900 hidden"></span>
             </button>
         </div>
     </div>
 
-    <!-- Notifications -->
+    <!-- Notifications Dropdown -->
     <div id="notification-dropdown" class="absolute top-24 right-8 z-50 w-80 bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl pointer-events-auto hidden">
         <div class="p-4 border-b border-slate-700 font-bold">Benachrichtigungen</div>
-        <div id="notif-content" class="p-2 max-h-96 overflow-y-auto">
+        <div id="notif-content" class="p-2 max-h-96 overflow-y-auto no-scrollbar">
             <div class="p-4 hover:bg-slate-700/50 rounded-xl cursor-pointer transition">
-                <span class="text-cyan-400 text-[10px] font-bold uppercase">Preisalarm</span>
-                <p class="text-sm mt-1">Flug nach Tokio jetzt 15% günstiger!</p>
+                <span class="text-cyan-400 text-[10px] font-bold uppercase tracking-widest">Preisalarm</span>
+                <p class="text-sm mt-1 text-slate-200">Preise nach London fallen gerade um 12%!</p>
             </div>
         </div>
     </div>
@@ -149,12 +85,12 @@
         <div class="content-limit flex justify-start items-end px-8">
             <div class="flex gap-4 interactive">
                 <div class="min-w-[140px] glass-card p-5 rounded-3xl flex flex-col gap-1">
-                    <span class="text-3xl font-bold text-white" id="stat-count">2</span>
-                    <span class="text-xs text-slate-400 uppercase tracking-widest">Reisen</span>
+                    <span class="text-3xl font-black text-white" id="stat-count">0</span>
+                    <span class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Reisen</span>
                 </div>
-                <div class="min-w-[140px] glass-card p-5 rounded-3xl flex flex-col gap-1 border-cyan-500/30 bg-cyan-900/10 cursor-pointer hover:bg-cyan-900/20" onclick="showAddTripModal()">
-                    <span class="material-symbols-outlined text-cyan-400 text-3xl">search</span>
-                    <span class="text-xs text-cyan-300 uppercase tracking-widest">Flug suchen</span>
+                <div class="min-w-[140px] glass-card p-5 rounded-3xl flex flex-col gap-1 border-cyan-500/30 bg-cyan-900/10 cursor-pointer hover:bg-cyan-900/20 transition-all" onclick="showAddTripModal()">
+                    <span class="material-symbols-outlined text-cyan-400 text-3xl">explore</span>
+                    <span class="text-[10px] text-cyan-300 uppercase font-black tracking-widest">Flug suchen</span>
                 </div>
             </div>
         </div>
@@ -164,7 +100,7 @@
     <div id="view-trips" class="ui-layer bg-slate-900/80 backdrop-blur-xl pt-32 px-10 pb-32 interactive overflow-y-auto no-scrollbar hidden opacity-0 transition-opacity">
         <div class="content-limit">
             <div class="flex items-center justify-between mb-8">
-                <h1 id="view-title" class="text-4xl font-bold text-white">Meine Reisen</h1>
+                <h1 id="view-title" class="text-4xl font-black text-white tracking-tight">Meine Planung</h1>
                 <div class="flex bg-slate-800 p-1 rounded-xl border border-slate-700">
                     <button onclick="toggleTripTab('trips')" id="tab-trips" class="px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm transition-all">Reisen</button>
                     <button onclick="toggleTripTab('alerts')" id="tab-alerts" class="px-6 py-2 rounded-lg text-slate-400 font-bold text-sm transition-all">Preisalarme</button>
@@ -176,263 +112,365 @@
     </div>
 
     <!-- Flight Search Modal -->
-    <div id="add-trip-modal" class="absolute inset-0 z-[60] modal-bg flex items-center justify-center pointer-events-auto hidden opacity-0 transition-opacity">
-        <div class="bg-slate-900 w-full max-w-2xl rounded-3xl p-8 border border-slate-700 shadow-2xl transform transition-transform translate-y-10 max-h-[90vh] flex flex-col">
-            <div class="flex justify-between items-center mb-6 shrink-0">
-                <h2 class="text-3xl font-bold">Flugsuche & Preisalarm</h2>
-                <button onclick="hideAddTripModal()" class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 transition"><span class="material-symbols-outlined">close</span></button>
-            </div>
-
-            <div id="search-inputs" class="space-y-4 shrink-0">
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="text-[10px] text-slate-500 uppercase font-bold ml-1 mb-1 block">Abflugort</label>
-                        <input id="input-origin" type="text" placeholder="z.B. FRA" class="search-input">
-                    </div>
-                    <div>
-                        <label class="text-[10px] text-slate-500 uppercase font-bold ml-1 mb-1 block">Zielort</label>
-                        <input id="input-dest" type="text" placeholder="z.B. TYO" class="search-input">
-                    </div>
+    <div id="add-trip-modal" class="absolute inset-0 z-[60] modal-bg flex items-center justify-center pointer-events-auto hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-slate-900 w-full max-w-3xl rounded-[2.5rem] p-10 border border-slate-700 shadow-2xl transform transition-transform translate-y-10 max-h-[92vh] flex flex-col overflow-hidden">
+            <div class="flex justify-between items-center mb-8 shrink-0">
+                <div>
+                    <h2 class="text-3xl font-black text-white">Flugsuche</h2>
+                    <p class="text-slate-400 text-sm mt-1">Live-Angebote finden und Trips planen</p>
                 </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="text-[10px] text-slate-500 uppercase font-bold ml-1 mb-1 block">Datum</label>
-                        <input id="input-start" type="date" class="search-input">
-                    </div>
-                    <div>
-                        <label class="text-[10px] text-slate-500 uppercase font-bold ml-1 mb-1 block">Budget (€)</label>
-                        <input id="input-budget" type="number" placeholder="Optional" class="search-input">
-                    </div>
-                </div>
-                <button class="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold py-4 rounded-xl shadow-lg transition flex items-center justify-center gap-2" onclick="performSearch()">
-                    <span class="material-symbols-outlined">search</span> Flüge suchen
+                <button onclick="hideAddTripModal()" class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 transition">
+                    <span class="material-symbols-outlined">close</span>
                 </button>
             </div>
 
-            <div id="search-results-area" class="mt-8 flex-1 overflow-y-auto no-scrollbar space-y-3 hidden border-t border-slate-800 pt-6">
-                <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Ergebnisse</h3>
-                <div id="results-list" class="space-y-3"></div>
+            <div id="search-inputs" class="space-y-6 shrink-0 overflow-y-auto pr-2 no-scrollbar">
+                <div class="grid grid-cols-2 gap-6">
+                    <div>
+                        <label class="text-[10px] text-slate-500 uppercase font-black tracking-widest ml-1 mb-2 block">VON (IATA)</label>
+                        <input id="input-origin" type="text" placeholder="z.B. FRA" class="search-input uppercase font-bold" maxlength="3">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-500 uppercase font-black tracking-widest ml-1 mb-2 block">NACH (IATA)</label>
+                        <input id="input-dest" type="text" placeholder="z.B. TYO" class="search-input uppercase font-bold" maxlength="3">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-[10px] text-slate-500 uppercase font-black tracking-widest ml-1 mb-2 block">Datum</label>
+                    <input id="input-start" type="date" class="search-input">
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-slate-500 uppercase font-black tracking-widest ml-1 mb-2 block">Passagiere</label>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="passenger-counter"><span class="text-xs text-slate-300">Erw.</span><div class="flex items-center gap-3"><div class="counter-btn" onclick="updateCounter('adults', -1)">-</div><span id="count-adults" class="font-bold">1</span><div class="counter-btn" onclick="updateCounter('adults', 1)">+</div></div></div>
+                        <div class="passenger-counter"><span class="text-xs text-slate-300">Kind</span><div class="flex items-center gap-3"><div class="counter-btn" onclick="updateCounter('children', -1)">-</div><span id="count-children" class="font-bold">0</span><div class="counter-btn" onclick="updateCounter('children', 1)">+</div></div></div>
+                        <div class="passenger-counter"><span class="text-xs text-slate-300">Baby</span><div class="flex items-center gap-3"><div class="counter-btn" onclick="updateCounter('infants', -1)">-</div><span id="count-infants" class="font-bold">0</span><div class="counter-btn" onclick="updateCounter('infants', 1)">+</div></div></div>
+                    </div>
+                </div>
+
+                <button id="btn-search-trigger" class="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-black py-4 rounded-2xl shadow-lg transition-all" onclick="performSearch()">
+                    FLÜGE SUCHEN
+                </button>
+            </div>
+
+            <div id="search-results-area" class="mt-8 flex-1 overflow-y-auto no-scrollbar space-y-4 hidden border-t border-slate-800 pt-8">
+                <div id="results-list" class="space-y-4 pb-4"></div>
             </div>
         </div>
     </div>
 
     <!-- Sidebar Detail -->
     <div id="detail-sheet" class="pointer-events-auto">
-        <div class="relative h-60 shrink-0">
+        <div class="relative h-64 shrink-0">
             <img id="detail-img" src="" class="w-full h-full object-cover">
             <div class="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-slate-900"></div>
-            <button onclick="closeDetail()" class="absolute top-4 right-4 w-10 h-10 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/10 hover:bg-black/60 transition"><span class="material-symbols-outlined">close</span></button>
-            <div class="absolute bottom-6 left-6 right-6">
-                <span id="detail-tag" class="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase mb-2"></span>
-                <h2 id="detail-title" class="text-3xl font-bold"></h2>
-                <p id="detail-date" class="text-slate-300 text-sm mt-1"></p>
+            <button onclick="closeDetail()" class="absolute top-6 right-6 w-12 h-12 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/10 hover:bg-black/60 transition"><span class="material-symbols-outlined">close</span></button>
+            <div class="absolute bottom-6 left-8 right-8">
+                <h2 id="detail-title" class="text-4xl font-black tracking-tight"></h2>
+                <p id="detail-date" class="text-slate-300 text-sm mt-1 uppercase font-bold tracking-widest"></p>
             </div>
         </div>
         <div class="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar">
-            <div class="flex gap-4">
-                <button class="flex-1 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold text-sm transition">Tickets buchen</button>
-            </div>
-            <div>
-                <h3 class="font-bold text-lg mb-4">Reiseplan</h3>
-                <div id="detail-timeline" class="space-y-4"></div>
-            </div>
-            <div class="pt-4">
-                <button onclick="deleteCurrentTrip()" class="w-full py-3 text-red-400 text-sm hover:bg-red-500/10 rounded-xl transition">Reise entfernen</button>
-            </div>
+            <div id="detail-itinerary" class="space-y-4"></div>
+            <button class="w-full py-4 bg-white text-slate-900 font-black rounded-2xl shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all">BUCHUNG ABSCHLIESSEN</button>
+            <button onclick="deleteCurrentTrip()" class="w-full py-4 text-red-400 text-xs font-black uppercase tracking-widest hover:bg-red-500/10 rounded-2xl transition-all">Reise entfernen</button>
         </div>
     </div>
 
-    <!-- Footer Nav -->
-    <div class="absolute bottom-8 left-0 right-0 z-40 flex justify-center pointer-events-none">
-        <div class="glass rounded-3xl px-8 py-4 flex items-center gap-10 pointer-events-auto border border-white/10 shadow-2xl">
-            <button onclick="switchView('home')" id="nav-home" class="nav-item group flex flex-col items-center gap-1 transition text-cyan-400">
-                <span class="material-symbols-outlined text-2xl group-hover:scale-110 transition">globe_asia</span>
-                <span class="text-[10px] font-bold uppercase tracking-tighter">Entdecken</span>
-            </button>
-            <button onclick="switchView('trips')" id="nav-trips" class="nav-item group flex flex-col items-center gap-1 transition text-slate-500 hover:text-white">
-                <span class="material-symbols-outlined text-2xl group-hover:scale-110 transition">map</span>
-                <span class="text-[10px] font-bold uppercase tracking-tighter">Planung</span>
-            </button>
-            <button onclick="showAddTripModal()" class="w-14 h-14 rounded-full bg-gradient-to-r from-cyan-400 to-blue-600 flex items-center justify-center text-white shadow-lg transform hover:scale-110 active:scale-95 transition">
-                <span class="material-symbols-outlined text-3xl">add</span>
-            </button>
-            <button class="nav-item group flex flex-col items-center gap-1 transition text-slate-500 hover:text-white"><span class="material-symbols-outlined text-2xl">folder_open</span><span class="text-[10px] font-bold uppercase">Doks</span></button>
-            <button class="nav-item group flex flex-col items-center gap-1 transition text-slate-500 hover:text-white"><span class="material-symbols-outlined text-2xl">person</span><span class="text-[10px] font-bold uppercase">Profil</span></button>
+    <!-- Navigation Bar -->
+    <div class="absolute bottom-10 left-0 right-0 z-40 flex justify-center pointer-events-none">
+        <div class="glass rounded-full px-8 py-4 flex items-center gap-10 pointer-events-auto border border-white/10 shadow-2xl">
+            <button onclick="switchView('home')" id="nav-home" class="flex flex-col items-center text-cyan-400 transition hover:scale-110"><span class="material-symbols-outlined text-3xl">public</span><span class="text-[8px] font-black uppercase">Home</span></button>
+            <button onclick="showAddTripModal()" class="w-16 h-16 rounded-full bg-gradient-to-r from-cyan-400 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/40 transform hover:scale-110 active:scale-95 transition-all"><span class="material-symbols-outlined text-4xl">add</span></button>
+            <button onclick="switchView('trips')" id="nav-trips" class="flex flex-col items-center text-slate-500 transition hover:scale-110"><span class="material-symbols-outlined text-3xl">event_note</span><span class="text-[8px] font-black uppercase">Planung</span></button>
         </div>
     </div>
 </div>
 
 <script>
-    // --- DATABASE ---
+    // --- DATABASE & STATE ---
     const cityDatabase = {
-        "reykjavik": {lat: 64.1466, lon: -21.9426}, "tokio": {lat: 35.6762, lon: 139.6503}, "tokyo": {lat: 35.6762, lon: 139.6503},
-        "kapstadt": {lat: -33.9249, lon: 18.4241}, "cape town": {lat: -33.9249, lon: 18.4241}, "new york": {lat: 40.7128, lon: -74.0060},
-        "london": {lat: 51.5074, lon: -0.1278}, "paris": {lat: 48.8566, lon: 2.3522}, "berlin": {lat: 52.5200, lon: 13.4050}
+        "FRA": {lat: 50.03, lon: 8.57}, "LHR": {lat: 51.47, lon: -0.45}, "TYO": {lat: 35.67, lon: 139.65}, "JFK": {lat: 40.64, lon: -73.77},
+        "BER": {lat: 52.36, lon: 13.50}, "CDG": {lat: 49.00, lon: 2.55}, "DXB": {lat: 25.25, lon: 55.36}
     };
 
-    let trips = {
-        'rey': { title: 'Reykjavík', date: 'Aktuell', type: 'current', lat: 64.1466, lon: -21.9426, img: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?q=80&w=1000', itinerary: [{ time: '10:00', title: 'Flug LH452', desc: 'Direktflug aus Frankfurt', color: 'cyan-500' }] },
-        'tyo': { title: 'Tokio', date: 'Geplant', type: 'future', lat: 35.6762, lon: 139.6503, img: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?q=80&w=1000', itinerary: [{ time: '12:30', title: 'Flug JL92', desc: 'Preisalarm aktiv', color: 'yellow-500' }] }
-    };
-
+    let trips = {};
     let priceAlerts = [];
+    let passengerCounts = { adults: 1, children: 0, infants: 0 };
+    let currentDetailKey = null;
 
-    // --- THREE.JS ---
-    const container = document.getElementById('canvas-container');
+    // --- THREE.JS ENGINE ---
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.z = 16;
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    camera.position.z = 15;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
-    container.appendChild(renderer.domElement);
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true; controls.autoRotate = true; controls.autoRotateSpeed = 0.4;
-    controls.minDistance = 10; controls.maxDistance = 40;
+    controls.enableDamping = true;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.5;
+    // Zoom Limits
+    controls.minDistance = 7;
+    controls.maxDistance = 30;
 
-    // Stars
-    const starGeo = new THREE.BufferGeometry();
-    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05, transparent: true, opacity: 0.8 });
-    const starVerts = []; for(let i=0; i<4000; i++) starVerts.push((Math.random()-0.5)*120, (Math.random()-0.5)*120, (Math.random()-0.5)*120);
-    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts, 3));
-    const stars = new THREE.Points(starGeo, starMat); scene.add(stars);
-
-    // Earth
-    const earthGroup = new THREE.Group(); scene.add(earthGroup);
+    const globeGroup = new THREE.Group(); scene.add(globeGroup);
     const texLoad = new THREE.TextureLoader();
 
-    // Stabilere Textur-Links
+    // Background Stars
+    const starGeo = new THREE.BufferGeometry();
+    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05, transparent: true, opacity: 0.8 });
+    const starVerts = [];
+    for(let i=0; i<5000; i++) starVerts.push((Math.random()-0.5)*150, (Math.random()-0.5)*150, (Math.random()-0.5)*150);
+    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts, 3));
+    const stars = new THREE.Points(starGeo, starMat);
+    scene.add(stars);
+
+    // Atmosphere Glow
+    const atmosphere = new THREE.Mesh(
+        new THREE.SphereGeometry(5.2, 64, 64),
+        new THREE.MeshPhongMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.1, side: THREE.BackSide, blending: THREE.AdditiveBlending })
+    );
+    scene.add(atmosphere);
+
+    // Earth with Emissive City Lights
     const earthMaterial = new THREE.MeshStandardMaterial({
         map: texLoad.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg'),
         emissiveMap: texLoad.load('https://unpkg.com/three-globe/example/img/earth-night.jpg'),
         emissive: new THREE.Color(0xffffcc),
-        emissiveIntensity: 0.8,
-        roughness: 0.8,
-        metalness: 0.2
+        emissiveIntensity: 0.4,
+        roughness: 0.7, metalness: 0.2
     });
-
     const earth = new THREE.Mesh(new THREE.SphereGeometry(5, 64, 64), earthMaterial);
-    earthGroup.add(earth);
+    globeGroup.add(earth);
 
-    const atmosphere = new THREE.Mesh(new THREE.SphereGeometry(5.25, 64, 64), new THREE.MeshPhongMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.1, side: THREE.BackSide, blending: THREE.AdditiveBlending }));
-    scene.add(atmosphere);
+    // Lighting (Sun)
+    scene.add(new THREE.AmbientLight(0x333333));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+    sun.position.set(10, 5, 10);
+    scene.add(sun);
 
-    scene.add(new THREE.AmbientLight(0x555555));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.2); sun.position.set(5, 3, 5); scene.add(sun);
-    const markerGroup = new THREE.Group(); earthGroup.add(markerGroup);
+    const markerGroup = new THREE.Group(); globeGroup.add(markerGroup);
 
-    function latLonToVector3(lat, lon, r) {
-        var phi = (90-lat)*(Math.PI/180), theta = (lon+180)*(Math.PI/180);
-        return new THREE.Vector3(-(r*Math.sin(phi)*Math.cos(theta)), (r*Math.cos(phi)), (r*Math.sin(phi)*Math.sin(theta)));
+    function latLonToPos(lat, lon, r) {
+        const phi = (90 - lat) * (Math.PI / 180);
+        const theta = (lon + 180) * (Math.PI / 180);
+        return new THREE.Vector3(-(r * Math.sin(phi) * Math.cos(theta)), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta));
+    }
+
+    // --- NEU: Bogen-Funktion ---
+    function drawFlightPath(originCode, destCode) {
+        const origin = cityDatabase[originCode];
+        const dest = cityDatabase[destCode];
+        if (!origin || !dest) return;
+
+        const start = latLonToPos(origin.lat, origin.lon, 5.05);
+        const end = latLonToPos(dest.lat, dest.lon, 5.05);
+
+        // Mittelpunkt berechnen und nach außen wölben für den Bogen
+        const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+        const distance = start.distanceTo(end);
+        mid.setLength(5.05 + distance * 0.4); // Die Höhe des Bogens hängt von der Distanz ab
+
+        const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
+        const points = curve.getPoints(50);
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const material = new THREE.LineBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.6, linewidth: 2 });
+
+        const line = new THREE.Line(geometry, material);
+        markerGroup.add(line);
     }
 
     function renderMarkers() {
         while(markerGroup.children.length > 0) markerGroup.remove(markerGroup.children[0]);
         Object.keys(trips).forEach(key => {
             const t = trips[key];
-            const m = new THREE.Mesh(new THREE.SphereGeometry(0.12,16,16), new THREE.MeshBasicMaterial({color: t.type==='current'?0x22d3ee:0xfacc15}));
-            m.position.copy(latLonToVector3(t.lat, t.lon, 5.05)); m.userData = {key:key, title:t.title}; markerGroup.add(m);
+            const m = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), new THREE.MeshBasicMaterial({ color: 0x22d3ee }));
+            m.position.copy(latLonToPos(t.lat, t.lon, 5.05));
+            m.userData = { key };
+            markerGroup.add(m);
         });
         document.getElementById('stat-count').innerText = Object.keys(trips).length;
     }
-    renderMarkers();
 
     function animate(t) {
         requestAnimationFrame(animate);
-        TWEEN.update(t);
+        TWEEN.update();
         controls.update();
         stars.rotation.y -= 0.0001;
-        earthMaterial.emissiveIntensity = 0.6 + Math.sin(t * 0.001) * 0.2;
+        earthMaterial.emissiveIntensity = 0.3 + Math.sin(t * 0.001) * 0.1;
         renderer.render(scene, camera);
-    } animate();
+    }
+    animate();
 
-    window.addEventListener('resize', ()=>{ renderer.setSize(window.innerWidth, window.innerHeight); camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); });
+    // --- UI HELPERS ---
 
-    // --- LOGIC ---
-    async function performSearch() {
-        const dest = document.getElementById('input-dest').value.trim();
-        if(!dest) return;
-        const btn = document.querySelector('#search-inputs button');
-        btn.innerText = "Suche läuft...";
-        setTimeout(() => {
-            document.getElementById('search-results-area').classList.remove('hidden');
-            const list = document.getElementById('results-list');
-            list.innerHTML = `
-                <div class="flight-result-card">
-                    <div><p class="font-bold text-white">Lufthansa</p><p class="text-xs text-slate-500">10:30 • 11h</p></div>
-                    <div class="text-right flex items-center gap-4">
-                        <div><p class="text-lg font-bold text-cyan-400">450€</p></div>
-                        <button onclick="saveAsTrip('${dest}', '450€ mit Lufthansa')" class="px-3 py-1 bg-cyan-500 text-slate-900 rounded-lg font-bold text-xs">Buchen</button>
-                    </div>
-                </div>`;
-            btn.innerText = "Flüge suchen";
-        }, 1200);
+    function updateCounter(type, delta) {
+        passengerCounts[type] = Math.max(type === 'adults' ? 1 : 0, passengerCounts[type] + delta);
+        document.getElementById(`count-${type}`).innerText = passengerCounts[type];
     }
 
-    async function saveAsTrip(cityName, desc) {
-        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${cityName}`);
-        const d = await r.json();
-        const coords = d.length > 0 ? {lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon)} : {lat:0, lon:0};
-        const newId = 't_' + Date.now();
-        trips[newId] = { title: cityName, date: 'Mai 2025', type: 'future', lat: coords.lat, lon: coords.lon, img: `https://loremflickr.com/800/600/${encodeURIComponent(cityName)},city`, itinerary: [{time: 'Info', title: 'Flug gebucht', desc: desc, color: 'cyan-500'}] };
-        renderMarkers(); filterTrips(''); hideAddTripModal(); flyToLocation(coords.lat, coords.lon);
+    async function performSearch() {
+        const origin = document.getElementById('input-origin').value.trim().toUpperCase();
+        const dest = document.getElementById('input-dest').value.trim().toUpperCase();
+        const date = document.getElementById('input-start').value;
+        const btn = document.getElementById('btn-search-trigger');
+
+        if(!origin || !dest || !date) return;
+
+        btn.disabled = true;
+        btn.innerHTML = `<div class="flex items-center justify-center gap-2"><div class="loading-ring"></div> SUCHE...</div>`;
+
+        try {
+            const res = await fetch('/api/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ origin, destination: dest, date, passengers: passengerCounts })
+            });
+            const data = await res.json();
+
+            // Marker leeren vor neuer Suche, um Route zu visualisieren
+            while(markerGroup.children.length > 0) markerGroup.remove(markerGroup.children[0]);
+
+            if(data.success && data.flights.length > 0) {
+                renderResults(data.flights, dest, origin);
+                drawFlightPath(origin, dest); // Bogen zeichnen
+                flyTo(cityDatabase[dest]?.lat || 0, cityDatabase[dest]?.lon || 0);
+            } else {
+                mockSearch(dest, origin);
+            }
+        } catch(e) { mockSearch(dest, origin); }
+        finally { btn.disabled = false; btn.innerText = "FLÜGE SUCHEN"; }
+    }
+
+    function mockSearch(cityName, originName) {
+        const dummyData = [
+            { airline: 'Lufthansa', price: '420€', departure: '10:30', duration: '11h 20m' },
+            { airline: 'Emirates', price: '389€', departure: '21:15', duration: '13h 05m' }
+        ];
+        renderResults(dummyData, cityName, originName);
+        drawFlightPath(originName, cityName);
+    }
+
+    function renderResults(flights, cityName, originName) {
+        const area = document.getElementById('search-results-area');
+        const list = document.getElementById('results-list');
+        area.classList.remove('hidden'); list.innerHTML = '';
+
+        flights.forEach(f => {
+            list.innerHTML += `
+                <div class="flight-result-card">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center font-black text-cyan-400 border border-slate-700">${f.airline.substring(0,2)}</div>
+                        <div><p class="font-bold text-white text-sm">${f.airline}</p><p class="text-[9px] text-slate-500 uppercase">${f.departure} • ${f.duration}</p></div>
+                    </div>
+                    <div class="text-right flex items-center gap-4">
+                        <p class="text-lg font-black text-white">${f.price}</p>
+                        <div class="flex flex-col gap-1">
+                            <button onclick="saveTrip('${cityName}', '${f.airline}', '${f.price}', '${originName}')" class="px-3 py-1 bg-cyan-500 text-slate-900 rounded-lg font-black text-[9px] uppercase">Planen</button>
+                            <button onclick="addAlert('${cityName}', '${f.price}')" class="px-3 py-1 border border-slate-700 rounded-lg font-black text-[9px] uppercase">Alarm</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    function saveTrip(dest, airline, price, origin) {
+        const id = 't_' + Date.now();
+        const coords = cityDatabase[dest] || {lat: 48 + Math.random()*5, lon: 10 + Math.random()*5};
+        trips[id] = {
+            title: dest, origin: origin, date: 'MAI 2025', lat: coords.lat, lon: coords.lon,
+            img: `https://loremflickr.com/800/600/city,${dest}?lock=${Math.floor(Math.random()*100)}`,
+            itinerary: [{title: 'Hinflug', desc: `${airline} • ${price}`}, {title: 'Planung', desc: 'Hotel-Recherche aktiv'}]
+        };
+        renderMarkers();
+        if (origin) drawFlightPath(origin, dest);
+        hideAddTripModal();
+        flyTo(coords.lat, coords.lon);
+    }
+
+    function addAlert(dest, price) {
+        priceAlerts.push({ id: Date.now(), dest, price });
+        hideAddTripModal();
+        document.getElementById('notif-badge').classList.remove('hidden');
+    }
+
+    function flyTo(lat, lon) {
+        controls.autoRotate = false;
+        const targetPos = latLonToPos(lat, lon, camera.position.length());
+        new TWEEN.Tween(camera.position).to({ x: targetPos.x, y: targetPos.y, z: targetPos.z }, 1500)
+            .easing(TWEEN.Easing.Cubic.InOut).onUpdate(()=>camera.lookAt(0,0,0)).start();
+    }
+
+    function switchView(v) {
+        ['home','trips'].forEach(id => {
+            const el = document.getElementById('view-'+id);
+            if(id===v) { el.classList.remove('hidden'); setTimeout(()=>el.classList.remove('opacity-0'),10); if(v==='trips') renderPlanning(); }
+            else { el.classList.add('opacity-0'); setTimeout(()=>el.classList.add('hidden'),300); }
+        });
+        document.getElementById('nav-home').className = v === 'home' ? 'flex flex-col items-center text-cyan-400' : 'flex flex-col items-center text-slate-500';
+        document.getElementById('nav-trips').className = v === 'trips' ? 'flex flex-col items-center text-cyan-400' : 'flex flex-col items-center text-slate-500';
+        controls.autoRotate = (v==='home');
+    }
+
+    function renderPlanning() {
+        const c = document.getElementById('trips-container'); c.innerHTML = '';
+        Object.keys(trips).forEach(k => {
+            const t = trips[k];
+            c.innerHTML += `
+                <div class="glass-card rounded-3xl overflow-hidden cursor-pointer" onclick="openDetail('${k}'); flyTo(${t.lat}, ${t.lon})">
+                    <img src="${t.img}" class="h-40 w-full object-cover">
+                    <div class="p-6"><h3 class="font-black text-xl">${t.title}</h3><p class="text-xs text-slate-400 uppercase font-bold tracking-widest">${t.date}</p></div>
+                </div>
+            `;
+        });
     }
 
     function toggleTripTab(tab) {
-        document.getElementById('view-title').innerText = tab === 'trips' ? 'Meine Reisen' : 'Preisalarme';
         document.getElementById('tab-trips').className = tab === 'trips' ? 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm' : 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm';
         document.getElementById('tab-alerts').className = tab === 'alerts' ? 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm' : 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm';
         document.getElementById('trips-container').classList.toggle('hidden', tab !== 'trips');
         document.getElementById('alerts-container').classList.toggle('hidden', tab !== 'alerts');
+        if(tab === 'alerts') renderAlerts();
     }
 
-    function flyToLocation(lat, lon) {
-        controls.autoRotate = false;
-        const phi = (90-lat)*(Math.PI/180), theta = (lon+180)*(Math.PI/180);
-        const d = camera.position.length();
-        new TWEEN.Tween(camera.position).to({ x: -(d*Math.sin(phi)*Math.cos(theta)), y: (d*Math.cos(phi)), z: (d*Math.sin(phi)*Math.sin(theta)) }, 1500).easing(TWEEN.Easing.Cubic.InOut).onUpdate(()=>camera.lookAt(0,0,0)).start();
-    }
-
-    function switchView(v) {
-        document.querySelectorAll('.nav-item').forEach(el=>el.classList.replace('text-cyan-400','text-slate-500'));
-        if(document.getElementById('nav-'+v)) document.getElementById('nav-'+v).classList.replace('text-slate-500','text-cyan-400');
-        ['home','trips'].forEach(id => {
-            const el = document.getElementById('view-'+id);
-            if(id===v) { el.classList.remove('hidden'); setTimeout(()=>el.classList.remove('opacity-0'),10); if(v==='trips') filterTrips(''); }
-            else { el.classList.add('opacity-0'); setTimeout(()=>el.classList.add('hidden'),300); }
-        });
-        controls.autoRotate = (v==='home');
-    }
-
-    function filterTrips(q) {
-        const c = document.getElementById('trips-container'); c.innerHTML = '';
-        Object.keys(trips).forEach(k => {
-            const t = trips[k];
-            c.innerHTML += `<div class="glass-card rounded-3xl overflow-hidden cursor-pointer" onclick="openDetail('${k}'); flyToLocation(${t.lat}, ${t.lon})">
-                <img src="${t.img}" class="h-40 w-full object-cover">
-                <div class="p-6"><h3 class="text-xl font-bold">${t.title}</h3><p class="text-slate-400 text-sm">${t.date}</p></div>
-            </div>`;
+    function renderAlerts() {
+        const c = document.getElementById('alerts-container');
+        c.innerHTML = priceAlerts.length ? '' : '<p class="text-center col-span-full py-20 text-slate-500 font-bold uppercase text-xs tracking-widest">Keine Alarme gesetzt</p>';
+        priceAlerts.forEach(a => {
+            c.innerHTML += `<div class="glass-card rounded-3xl p-8 flex justify-between items-center"><div class="flex items-center gap-4"><div class="w-12 h-12 bg-cyan-500/20 text-cyan-400 rounded-full flex items-center justify-center"><span class="material-symbols-outlined">notifications_active</span></div><div><h3 class="font-black text-2xl">${a.dest}</h3><p class="text-[10px] text-slate-500 uppercase font-black">Preisüberwachung aktiv</p></div></div><p class="text-2xl font-black text-white">${a.price}</p></div>`;
         });
     }
 
     function openDetail(k) {
-        const t = trips[k]; document.getElementById('detail-img').src = t.img;
-        document.getElementById('detail-title').innerText = t.title; document.getElementById('detail-date').innerText = t.date;
-        const tl = document.getElementById('detail-timeline'); tl.innerHTML = '';
-        t.itinerary.forEach(i => { tl.innerHTML += `<div class="bg-slate-800/50 p-4 rounded-xl mt-2"><p class="font-bold text-sm">${i.title}</p><p class="text-xs text-slate-400">${i.desc}</p></div>`; });
+        const t = trips[k]; currentDetailKey = k;
+        document.getElementById('detail-img').src = t.img;
+        document.getElementById('detail-title').innerText = t.title;
+        document.getElementById('detail-date').innerText = t.date;
+        const tl = document.getElementById('detail-itinerary'); tl.innerHTML = '';
+        t.itinerary.forEach(i => tl.innerHTML += `<div class="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50"><p class="font-bold text-white text-sm">${i.title}</p><p class="text-[10px] text-slate-400 mt-1 uppercase font-bold">${i.desc}</p></div>`);
         document.getElementById('detail-sheet').classList.add('open');
     }
 
     function closeDetail() { document.getElementById('detail-sheet').classList.remove('open'); }
     function showAddTripModal() { document.getElementById('add-trip-modal').classList.remove('hidden'); setTimeout(()=>document.getElementById('add-trip-modal').classList.remove('opacity-0'),10); }
     function hideAddTripModal() { document.getElementById('add-trip-modal').classList.add('opacity-0'); setTimeout(()=>document.getElementById('add-trip-modal').classList.add('hidden'),300); }
-    function toggleNotifications() { document.getElementById('notification-dropdown').classList.toggle('hidden'); }
-    function deleteCurrentTrip() { if(confirm('Löschen?')) { /* delete logic */ closeDetail(); } }
+    function toggleNotifications() { document.getElementById('notification-dropdown').classList.toggle('hidden'); document.getElementById('notif-badge').classList.add('hidden'); }
+    function deleteCurrentTrip() { if(currentDetailKey) { delete trips[currentDetailKey]; renderMarkers(); renderPlanning(); closeDetail(); } }
 
     window.addEventListener('click', e => {
+        const mouse = new THREE.Vector2((e.clientX/window.innerWidth)*2-1, -(e.clientY/window.innerHeight)*2+1);
+        const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
         const hits = raycaster.intersectObjects(markerGroup.children);
-        if(hits.length>0) { openDetail(hits[0].object.userData.key); flyToLocation(trips[hits[0].object.userData.key].lat, trips[hits[0].object.userData.key].lon); }
+        if(hits.length>0) { const key = hits[0].object.userData.key; if(key) { openDetail(key); flyTo(trips[key].lat, trips[key].lon); } }
     });
+
+    window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
 </script>
 </body>
 </html>
