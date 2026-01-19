@@ -13,5 +13,5 @@
 - Die UI ist intuitiv und modern dargestellt, sodass jeder Nutzer schnell sieht, wo er mal war und wo er noch hinmöchte
 
 ### Dokumentation
-- Für Fast-Flights findet man die Dokumentation [hier](https://pypi.org/project/fast-flights/)
+- Für Fast-Flights findet man die Dokumentation [hier](https://aweirddev.github.io/flights/)
 
