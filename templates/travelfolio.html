@@ -97,14 +97,13 @@
         }
         #detail-sheet.open { transform: translateX(0); }
 
-        @media (max-width: 640px) {
-            #detail-sheet {
-                right: 0; top: 15%; bottom: 0; width: 100%; border-radius: 30px 30px 0 0;
-            }
-        }
-
         .marker-label { position: absolute; background: rgba(0, 0, 0, 0.8); color: white; padding: 6px 12px; border-radius: 8px; font-size: 12px; pointer-events: none; opacity: 0; transition: opacity 0.2s; transform: translate(-50%, -150%); white-space: nowrap; border: 1px solid rgba(34, 211, 238, 0.3); z-index: 20; }
         .modal-bg { background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); }
+
+        .search-input { width: 100%; background: #1e293b; padding: 1rem; border-radius: 0.75rem; border: 1px solid #334155; color: white; outline: none; transition: border-color 0.2s; }
+        .search-input:focus { border-color: #22d3ee; }
+        .flight-result-card { background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; padding: 1rem; border-radius: 1rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s; }
+        .flight-result-card:hover { background: rgba(30, 41, 59, 0.6); border-color: #475569; }
     </style>
 </head>
 <body>
@@ -113,36 +112,31 @@
     <div id="canvas-container"></div>
     <div id="marker-label" class="marker-label">Label</div>
 
-    <input type="file" id="photo-upload-input" accept="image/*" class="hidden" onchange="handlePhotoUpload(this)">
-
     <!-- Header -->
     <div class="absolute top-0 left-0 right-0 z-40 pt-8 pb-4 px-8 bg-gradient-to-b from-slate-900/90 to-transparent pointer-events-none">
         <div class="content-limit flex justify-between items-center">
             <div class="flex items-center gap-4 pointer-events-auto cursor-pointer" onclick="switchView('home')">
-                <!-- Flask Logo Integration -->
                 <img src="{{ url_for('static', filename='logo.png') }}"
                      class="w-12 h-12 rounded-xl shadow-lg shadow-cyan-500/20 border border-white/10 hover:scale-105 transition transform object-cover bg-slate-800"
                      alt="TF"
                      onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
 
-                <!-- Fallback-Icon falls das Bild nicht lädt -->
                 <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 hidden">
                     <span class="material-symbols-outlined text-white">flight_takeoff</span>
                 </div>
-
                 <span class="text-2xl font-bold tracking-tight text-white drop-shadow-md">TravelFolio</span>
             </div>
             <button onclick="toggleNotifications()" class="relative w-12 h-12 rounded-full bg-white/5 flex items-center justify-center backdrop-blur-md pointer-events-auto hover:bg-white/10 transition border border-white/10">
                 <span class="material-symbols-outlined text-slate-200">notifications</span>
-                <span class="absolute top-3 right-3 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-900"></span>
+                <span id="notif-badge" class="absolute top-3 right-3 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-900"></span>
             </button>
         </div>
     </div>
 
-    <!-- Restliche Views und Elemente bleiben gleich -->
+    <!-- Notifications -->
     <div id="notification-dropdown" class="absolute top-24 right-8 z-50 w-80 bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl pointer-events-auto hidden">
         <div class="p-4 border-b border-slate-700 font-bold">Benachrichtigungen</div>
-        <div class="p-2 max-h-96 overflow-y-auto">
+        <div id="notif-content" class="p-2 max-h-96 overflow-y-auto">
             <div class="p-4 hover:bg-slate-700/50 rounded-xl cursor-pointer transition">
                 <span class="text-cyan-400 text-[10px] font-bold uppercase">Preisalarm</span>
                 <p class="text-sm mt-1">Flug nach Tokio jetzt 15% günstiger!</p>
@@ -150,6 +144,7 @@
         </div>
     </div>
 
+    <!-- Home View -->
     <div id="view-home" class="ui-layer flex flex-col justify-end pb-32 transition-opacity duration-300">
         <div class="content-limit flex justify-start items-end px-8">
             <div class="flex gap-4 interactive">
@@ -158,60 +153,70 @@
                     <span class="text-xs text-slate-400 uppercase tracking-widest">Reisen</span>
                 </div>
                 <div class="min-w-[140px] glass-card p-5 rounded-3xl flex flex-col gap-1 border-cyan-500/30 bg-cyan-900/10 cursor-pointer hover:bg-cyan-900/20" onclick="showAddTripModal()">
-                    <span class="material-symbols-outlined text-cyan-400 text-3xl">add_location</span>
-                    <span class="text-xs text-cyan-300 uppercase tracking-widest">Reise planen</span>
+                    <span class="material-symbols-outlined text-cyan-400 text-3xl">search</span>
+                    <span class="text-xs text-cyan-300 uppercase tracking-widest">Flug suchen</span>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Trips View -->
     <div id="view-trips" class="ui-layer bg-slate-900/80 backdrop-blur-xl pt-32 px-10 pb-32 interactive overflow-y-auto no-scrollbar hidden opacity-0 transition-opacity">
         <div class="content-limit">
-            <h1 class="text-4xl font-bold text-white mb-8">Meine Reisen</h1>
-            <div id="trips-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
-        </div>
-    </div>
-
-    <div class="absolute bottom-8 left-0 right-0 z-40 flex justify-center pointer-events-none">
-        <div class="glass rounded-3xl px-8 py-4 flex items-center gap-10 pointer-events-auto border border-white/10 shadow-2xl">
-            <button onclick="switchView('home')" id="nav-home" class="nav-item group flex flex-col items-center gap-1 transition text-cyan-400">
-                <span class="material-symbols-outlined text-2xl group-hover:scale-110 transition">globe_asia</span>
-                <span class="text-[10px] font-bold uppercase tracking-tighter">Entdecken</span>
-            </button>
-            <button onclick="switchView('trips')" id="nav-trips" class="nav-item group flex flex-col items-center gap-1 transition text-slate-500 hover:text-white">
-                <span class="material-symbols-outlined text-2xl group-hover:scale-110 transition">map</span>
-                <span class="text-[10px] font-bold uppercase tracking-tighter">Reisen</span>
-            </button>
-            <button onclick="showAddTripModal()" class="w-14 h-14 rounded-full bg-gradient-to-r from-cyan-400 to-blue-600 flex items-center justify-center text-white shadow-lg transform hover:scale-110 active:scale-95 transition">
-                <span class="material-symbols-outlined text-3xl">add</span>
-            </button>
-            <button class="nav-item group flex flex-col items-center gap-1 transition text-slate-500 hover:text-white">
-                <span class="material-symbols-outlined text-2xl group-hover:scale-110 transition">folder_open</span>
-                <span class="text-[10px] font-bold uppercase tracking-tighter">Dokumente</span>
-            </button>
-            <button class="nav-item group flex flex-col items-center gap-1 transition text-slate-500 hover:text-white">
-                <span class="material-symbols-outlined text-2xl group-hover:scale-110 transition">person</span>
-                <span class="text-[10px] font-bold uppercase tracking-tighter">Profil</span>
-            </button>
-        </div>
-    </div>
-
-    <div id="add-trip-modal" class="absolute inset-0 z-[60] modal-bg flex items-center justify-center pointer-events-auto hidden opacity-0 transition-opacity">
-        <div class="bg-slate-900 w-full max-w-lg rounded-3xl p-8 border border-slate-700 shadow-2xl transform transition-transform translate-y-10">
-            <div class="flex justify-between items-center mb-8">
-                <h2 class="text-3xl font-bold">Flug suchen</h2>
-                <button onclick="hideAddTripModal()" class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700"><span class="material-symbols-outlined">close</span></button>
-            </div>
-            <div class="space-y-5">
-                <div>
-                    <label class="text-xs text-slate-500 uppercase font-bold ml-1 mb-2 block">Zielort</label>
-                    <input id="input-dest" type="text" placeholder="Wohin solls gehen?" class="w-full bg-slate-800 p-4 rounded-xl border border-slate-700 focus:border-cyan-500 outline-none text-white">
+            <div class="flex items-center justify-between mb-8">
+                <h1 id="view-title" class="text-4xl font-bold text-white">Meine Reisen</h1>
+                <div class="flex bg-slate-800 p-1 rounded-xl border border-slate-700">
+                    <button onclick="toggleTripTab('trips')" id="tab-trips" class="px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm transition-all">Reisen</button>
+                    <button onclick="toggleTripTab('alerts')" id="tab-alerts" class="px-6 py-2 rounded-lg text-slate-400 font-bold text-sm transition-all">Preisalarme</button>
                 </div>
-                <button class="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold py-4 rounded-xl mt-4 shadow-lg transition" onclick="submitNewTrip()">Flug & Preise suchen</button>
+            </div>
+            <div id="trips-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+            <div id="alerts-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden"></div>
+        </div>
+    </div>
+
+    <!-- Flight Search Modal -->
+    <div id="add-trip-modal" class="absolute inset-0 z-[60] modal-bg flex items-center justify-center pointer-events-auto hidden opacity-0 transition-opacity">
+        <div class="bg-slate-900 w-full max-w-2xl rounded-3xl p-8 border border-slate-700 shadow-2xl transform transition-transform translate-y-10 max-h-[90vh] flex flex-col">
+            <div class="flex justify-between items-center mb-6 shrink-0">
+                <h2 class="text-3xl font-bold">Flugsuche & Preisalarm</h2>
+                <button onclick="hideAddTripModal()" class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 transition"><span class="material-symbols-outlined">close</span></button>
+            </div>
+
+            <div id="search-inputs" class="space-y-4 shrink-0">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[10px] text-slate-500 uppercase font-bold ml-1 mb-1 block">Abflugort</label>
+                        <input id="input-origin" type="text" placeholder="z.B. FRA" class="search-input">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-500 uppercase font-bold ml-1 mb-1 block">Zielort</label>
+                        <input id="input-dest" type="text" placeholder="z.B. TYO" class="search-input">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[10px] text-slate-500 uppercase font-bold ml-1 mb-1 block">Datum</label>
+                        <input id="input-start" type="date" class="search-input">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-500 uppercase font-bold ml-1 mb-1 block">Budget (€)</label>
+                        <input id="input-budget" type="number" placeholder="Optional" class="search-input">
+                    </div>
+                </div>
+                <button class="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold py-4 rounded-xl shadow-lg transition flex items-center justify-center gap-2" onclick="performSearch()">
+                    <span class="material-symbols-outlined">search</span> Flüge suchen
+                </button>
+            </div>
+
+            <div id="search-results-area" class="mt-8 flex-1 overflow-y-auto no-scrollbar space-y-3 hidden border-t border-slate-800 pt-6">
+                <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Ergebnisse</h3>
+                <div id="results-list" class="space-y-3"></div>
             </div>
         </div>
     </div>
 
+    <!-- Sidebar Detail -->
     <div id="detail-sheet" class="pointer-events-auto">
         <div class="relative h-60 shrink-0">
             <img id="detail-img" src="" class="w-full h-full object-cover">
@@ -225,16 +230,34 @@
         </div>
         <div class="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar">
             <div class="flex gap-4">
-                <button class="flex-1 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold text-sm transition">Tickets</button>
-                <button class="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm transition border border-slate-700">Alarm setzen</button>
+                <button class="flex-1 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold text-sm transition">Tickets buchen</button>
             </div>
             <div>
-                <h3 class="font-bold text-lg mb-4">Fluginfos</h3>
+                <h3 class="font-bold text-lg mb-4">Reiseplan</h3>
                 <div id="detail-timeline" class="space-y-4"></div>
             </div>
             <div class="pt-4">
-                <button onclick="deleteCurrentTrip()" class="w-full py-3 text-red-400 text-sm hover:bg-red-500/10 rounded-xl transition">Reise löschen</button>
+                <button onclick="deleteCurrentTrip()" class="w-full py-3 text-red-400 text-sm hover:bg-red-500/10 rounded-xl transition">Reise entfernen</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Footer Nav -->
+    <div class="absolute bottom-8 left-0 right-0 z-40 flex justify-center pointer-events-none">
+        <div class="glass rounded-3xl px-8 py-4 flex items-center gap-10 pointer-events-auto border border-white/10 shadow-2xl">
+            <button onclick="switchView('home')" id="nav-home" class="nav-item group flex flex-col items-center gap-1 transition text-cyan-400">
+                <span class="material-symbols-outlined text-2xl group-hover:scale-110 transition">globe_asia</span>
+                <span class="text-[10px] font-bold uppercase tracking-tighter">Entdecken</span>
+            </button>
+            <button onclick="switchView('trips')" id="nav-trips" class="nav-item group flex flex-col items-center gap-1 transition text-slate-500 hover:text-white">
+                <span class="material-symbols-outlined text-2xl group-hover:scale-110 transition">map</span>
+                <span class="text-[10px] font-bold uppercase tracking-tighter">Planung</span>
+            </button>
+            <button onclick="showAddTripModal()" class="w-14 h-14 rounded-full bg-gradient-to-r from-cyan-400 to-blue-600 flex items-center justify-center text-white shadow-lg transform hover:scale-110 active:scale-95 transition">
+                <span class="material-symbols-outlined text-3xl">add</span>
+            </button>
+            <button class="nav-item group flex flex-col items-center gap-1 transition text-slate-500 hover:text-white"><span class="material-symbols-outlined text-2xl">folder_open</span><span class="text-[10px] font-bold uppercase">Doks</span></button>
+            <button class="nav-item group flex flex-col items-center gap-1 transition text-slate-500 hover:text-white"><span class="material-symbols-outlined text-2xl">person</span><span class="text-[10px] font-bold uppercase">Profil</span></button>
         </div>
     </div>
 </div>
@@ -252,61 +275,50 @@
         'tyo': { title: 'Tokio', date: 'Geplant', type: 'future', lat: 35.6762, lon: 139.6503, img: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?q=80&w=1000', itinerary: [{ time: '12:30', title: 'Flug JL92', desc: 'Preisalarm aktiv', color: 'yellow-500' }] }
     };
 
-    // --- THREE.JS SCENE ---
+    let priceAlerts = [];
+
+    // --- THREE.JS ---
     const container = document.getElementById('canvas-container');
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.z = 16;
-
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);
-
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.autoRotate = true;
-    controls.autoRotateSpeed = 0.4;
+    controls.enableDamping = true; controls.autoRotate = true; controls.autoRotateSpeed = 0.4;
+    controls.minDistance = 10; controls.maxDistance = 40;
 
-    controls.minDistance = 7;
-    controls.maxDistance = 40;
-
+    // Stars
     const starGeo = new THREE.BufferGeometry();
     const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05, transparent: true, opacity: 0.8 });
-    const starVerts = [];
-    for(let i=0; i<4000; i++) starVerts.push((Math.random()-0.5)*120, (Math.random()-0.5)*120, (Math.random()-0.5)*120);
+    const starVerts = []; for(let i=0; i<4000; i++) starVerts.push((Math.random()-0.5)*120, (Math.random()-0.5)*120, (Math.random()-0.5)*120);
     starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts, 3));
-    const stars = new THREE.Points(starGeo, starMat);
-    scene.add(stars);
+    const stars = new THREE.Points(starGeo, starMat); scene.add(stars);
 
+    // Earth
     const earthGroup = new THREE.Group(); scene.add(earthGroup);
     const texLoad = new THREE.TextureLoader();
-    const earth = new THREE.Mesh(
-        new THREE.SphereGeometry(5, 64, 64),
-        new THREE.MeshPhongMaterial({
-            map: texLoad.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg'),
-            specularMap: texLoad.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_specular_2048.jpg'),
-            normalMap: texLoad.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_normal_2048.jpg'),
-            shininess: 12
-        })
-    );
+
+    // Stabilere Textur-Links
+    const earthMaterial = new THREE.MeshStandardMaterial({
+        map: texLoad.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg'),
+        emissiveMap: texLoad.load('https://unpkg.com/three-globe/example/img/earth-night.jpg'),
+        emissive: new THREE.Color(0xffffcc),
+        emissiveIntensity: 0.8,
+        roughness: 0.8,
+        metalness: 0.2
+    });
+
+    const earth = new THREE.Mesh(new THREE.SphereGeometry(5, 64, 64), earthMaterial);
     earthGroup.add(earth);
 
-    const atmosphere = new THREE.Mesh(
-        new THREE.SphereGeometry(5.25, 64, 64),
-        new THREE.MeshPhongMaterial({
-            color: 0x22d3ee,
-            transparent: true,
-            opacity: 0.12,
-            side: THREE.BackSide,
-            blending: THREE.AdditiveBlending
-        })
-    );
+    const atmosphere = new THREE.Mesh(new THREE.SphereGeometry(5.25, 64, 64), new THREE.MeshPhongMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.1, side: THREE.BackSide, blending: THREE.AdditiveBlending }));
     scene.add(atmosphere);
 
-    scene.add(new THREE.AmbientLight(0x444444));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(5, 3, 5); scene.add(sun);
-
+    scene.add(new THREE.AmbientLight(0x555555));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.2); sun.position.set(5, 3, 5); scene.add(sun);
     const markerGroup = new THREE.Group(); earthGroup.add(markerGroup);
 
     function latLonToVector3(lat, lon, r) {
@@ -325,54 +337,53 @@
     }
     renderMarkers();
 
-    const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2(), label = document.getElementById('marker-label');
-    window.addEventListener('mousemove', e => {
-        mouse.x = (e.clientX / window.innerWidth) * 2 - 1; mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-        raycaster.setFromCamera(mouse, camera);
-        const hits = raycaster.intersectObjects(markerGroup.children);
-        if(hits.length>0) {
-            document.body.style.cursor='pointer';
-            const v = hits[0].object.position.clone().project(camera);
-            label.style.left = `${(v.x*.5+.5)*window.innerWidth}px`; label.style.top = `${(-v.y*.5+.5)*window.innerHeight}px`;
-            label.textContent = hits[0].object.userData.title; label.style.opacity=1;
-        } else { document.body.style.cursor='default'; label.style.opacity=0; }
-    });
-    window.addEventListener('click', e => {
-        raycaster.setFromCamera(mouse, camera);
-        const hits = raycaster.intersectObjects(markerGroup.children);
-        if(hits.length>0) { openDetail(hits[0].object.userData.key); flyToLocation(trips[hits[0].object.userData.key].lat, trips[hits[0].object.userData.key].lon); }
-    });
-
     function animate(t) {
         requestAnimationFrame(animate);
         TWEEN.update(t);
         controls.update();
         stars.rotation.y -= 0.0001;
+        earthMaterial.emissiveIntensity = 0.6 + Math.sin(t * 0.001) * 0.2;
         renderer.render(scene, camera);
-    }
-    animate();
+    } animate();
 
-    window.addEventListener('resize', ()=>{
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-    });
+    window.addEventListener('resize', ()=>{ renderer.setSize(window.innerWidth, window.innerHeight); camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); });
 
     // --- LOGIC ---
-    async function submitNewTrip() {
-        const cityName = document.getElementById('input-dest').value.trim();
-        if(!cityName) return;
-        const btn = document.querySelector('#add-trip-modal button');
-        btn.innerText = "Suche Preise...";
-        setTimeout(async () => {
-            const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${cityName}`);
-            const d = await r.json();
-            const coords = d.length > 0 ? {lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon)} : {lat:0, lon:0};
-            const newId = 't_' + Date.now();
-            trips[newId] = { title: cityName, date: 'Suche...', type: 'future', lat: coords.lat, lon: coords.lon, img: `https://loremflickr.com/800/600/${encodeURIComponent(cityName)},city`, itinerary: [{time: 'Info', title: 'Flug gefunden', desc: 'Preis: 389€', color: 'cyan-500'}] };
-            renderMarkers(); filterTrips(''); hideAddTripModal(); flyToLocation(coords.lat, coords.lon);
-            btn.innerText = "Flug & Preise suchen";
-        }, 1000);
+    async function performSearch() {
+        const dest = document.getElementById('input-dest').value.trim();
+        if(!dest) return;
+        const btn = document.querySelector('#search-inputs button');
+        btn.innerText = "Suche läuft...";
+        setTimeout(() => {
+            document.getElementById('search-results-area').classList.remove('hidden');
+            const list = document.getElementById('results-list');
+            list.innerHTML = `
+                <div class="flight-result-card">
+                    <div><p class="font-bold text-white">Lufthansa</p><p class="text-xs text-slate-500">10:30 • 11h</p></div>
+                    <div class="text-right flex items-center gap-4">
+                        <div><p class="text-lg font-bold text-cyan-400">450€</p></div>
+                        <button onclick="saveAsTrip('${dest}', '450€ mit Lufthansa')" class="px-3 py-1 bg-cyan-500 text-slate-900 rounded-lg font-bold text-xs">Buchen</button>
+                    </div>
+                </div>`;
+            btn.innerText = "Flüge suchen";
+        }, 1200);
+    }
+
+    async function saveAsTrip(cityName, desc) {
+        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${cityName}`);
+        const d = await r.json();
+        const coords = d.length > 0 ? {lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon)} : {lat:0, lon:0};
+        const newId = 't_' + Date.now();
+        trips[newId] = { title: cityName, date: 'Mai 2025', type: 'future', lat: coords.lat, lon: coords.lon, img: `https://loremflickr.com/800/600/${encodeURIComponent(cityName)},city`, itinerary: [{time: 'Info', title: 'Flug gebucht', desc: desc, color: 'cyan-500'}] };
+        renderMarkers(); filterTrips(''); hideAddTripModal(); flyToLocation(coords.lat, coords.lon);
+    }
+
+    function toggleTripTab(tab) {
+        document.getElementById('view-title').innerText = tab === 'trips' ? 'Meine Reisen' : 'Preisalarme';
+        document.getElementById('tab-trips').className = tab === 'trips' ? 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm' : 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm';
+        document.getElementById('tab-alerts').className = tab === 'alerts' ? 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm' : 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm';
+        document.getElementById('trips-container').classList.toggle('hidden', tab !== 'trips');
+        document.getElementById('alerts-container').classList.toggle('hidden', tab !== 'alerts');
     }
 
     function flyToLocation(lat, lon) {
@@ -407,10 +418,8 @@
     function openDetail(k) {
         const t = trips[k]; document.getElementById('detail-img').src = t.img;
         document.getElementById('detail-title').innerText = t.title; document.getElementById('detail-date').innerText = t.date;
-        const tag = document.getElementById('detail-tag'); tag.innerText = t.type==='current'?'Aktuell':'Geplant';
-        tag.className = `inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase mb-2 ${t.type==='current'?'bg-cyan-500/20 text-cyan-400':'bg-yellow-500/20 text-yellow-400'}`;
         const tl = document.getElementById('detail-timeline'); tl.innerHTML = '';
-        t.itinerary.forEach(i => { tl.innerHTML += `<div class="bg-slate-800/50 p-4 rounded-xl"><p class="font-bold text-sm">${i.title}</p><p class="text-xs text-slate-400">${i.desc}</p></div>`; });
+        t.itinerary.forEach(i => { tl.innerHTML += `<div class="bg-slate-800/50 p-4 rounded-xl mt-2"><p class="font-bold text-sm">${i.title}</p><p class="text-xs text-slate-400">${i.desc}</p></div>`; });
         document.getElementById('detail-sheet').classList.add('open');
     }
 
@@ -419,6 +428,11 @@
     function hideAddTripModal() { document.getElementById('add-trip-modal').classList.add('opacity-0'); setTimeout(()=>document.getElementById('add-trip-modal').classList.add('hidden'),300); }
     function toggleNotifications() { document.getElementById('notification-dropdown').classList.toggle('hidden'); }
     function deleteCurrentTrip() { if(confirm('Löschen?')) { /* delete logic */ closeDetail(); } }
+
+    window.addEventListener('click', e => {
+        const hits = raycaster.intersectObjects(markerGroup.children);
+        if(hits.length>0) { openDetail(hits[0].object.userData.key); flyToLocation(trips[hits[0].object.userData.key].lat, trips[hits[0].object.userData.key].lon); }
+    });
 </script>
 </body>
 </html>
