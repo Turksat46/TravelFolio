@@ -1,16 +1,22 @@
-# This is a sample Python script.
+import flask
+from flask import Flask, request, render_template, jsonify
+from fast_flights import FlightData, Passengers, Result, get_flights
 
-# Press Umschalt+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+app = Flask(__name__)
+@app.route('/')
+def hello_world():
+    return 'Hello World!'
 
+@app.route('/api/search', methods=['POST'])
+def search():
+    data = request.get_json()
+    origin = data.get('origin')
+    destination = data.get('destination')
+    departure_time = data.get('departure_time')
+    try:
+        passengers = Passengers()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Strg+F8 to toggle the breakpoint.
-
-
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    print_hi('PyCharm')
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+    app.run(debug=True)
