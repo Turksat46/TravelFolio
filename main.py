@@ -5,7 +5,7 @@ from fast_flights import FlightData, Passengers, Result, get_flights
 app = Flask(__name__)
 @app.route('/')
 def hello_world():
-    return 'Hello World!'
+    return render_template('travelfolio.html')
 
 @app.route('/api/search', methods=['POST'])
 def search():
