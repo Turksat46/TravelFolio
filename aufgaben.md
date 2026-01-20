@@ -29,11 +29,9 @@
 - [ ] **Loading States** für Search-Button und Results
 
 ### Preisalarme
-- [x] **Alarm-Verwaltung** in der UI (Alarm löschen) ✅
-- [x] **Preis-Tracking visualisieren** (Chart mit Preisverlauf) ✅
-- [x] **Alarm-Details** erweitern (Datum, Route-Info) ✅
-- [x] **Plus-Button zum Hinzufügen** (Modal-Formular) ✅
-- [x] **Horizontales Sliding** für Preisalarme ✅
+- [ ] **Alarm-Verwaltung** in der UI (Alarm löschen)
+- [ ] **Preis-Tracking visualisieren** (Chart mit Preisverlauf)
+- [ ] **Alarm-Details** erweitern (Datum, Route-Info)
 
 ### Trip-Management
 - [ ] **Trips bearbeiten** (Titel, Datum ändern)
