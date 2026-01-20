@@ -31,22 +31,24 @@ def search():
 
     try:
         # Passagier-Objekt erstellen
-        passengers = Passengers(
+        passengers: Passengers = Passengers(
             adults=int(pass_data.get('adults', 1)),
             children=int(pass_data.get('children', 0)),
-            infants_in_seat=int(pass_data.get('infants', 0))
+            infants_in_seat=int(pass_data.get('infants', 0)),
+            infants_on_lap=0
         )
 
         # FIX: FlightData mit den exakt geforderten Keyword-Arguments instanziieren
         # Laut Fehlermeldung: date, from_airport, to_airport
-        flight_data = FlightData(
+        flight_data = [FlightData(
             date=departure_date,
             from_airport=origin,
             to_airport=destination
-        )
+        )]
 
         # Flüge abrufen
-        result = get_flights(flight_data, passengers)
+        result:Result = get_flights(flight_data=flight_data, trip="one-way", seat="economy", passengers=passengers)
+        print(result)
 
         # Ergebnisse für JSON-Response aufbereiten
         flights_list = []
