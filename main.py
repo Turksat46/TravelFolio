@@ -2,6 +2,7 @@ import flask
 from flask import Flask, request, render_template, jsonify
 from fast_flights import FlightData, Passengers, Result, get_flights
 
+
 import datetime
 
 app = Flask(__name__)
@@ -21,9 +22,9 @@ def search():
     """
     data = request.get_json()
 
-    origin = data.get('origin', '').upper()
-    destination = data.get('destination', '').upper()
-    departure_date = data.get('date')
+    origin = str(data.get('origin', '').upper())
+    destination = str(data.get('destination', '').upper())
+    departure_date = str(data.get('date'))
     pass_data = data.get('passengers', {})
 
     if not all([origin, destination, departure_date]):
@@ -46,8 +47,17 @@ def search():
             to_airport=destination
         )]
 
+        print(departure_date)
+
         # Flüge abrufen
-        result:Result = get_flights(flight_data=flight_data, trip="one-way", seat="economy", passengers=passengers)
+        # 'fetch_mode="local"' nutzen, um Google Consent Probleme zu umgehen (benötigt Playwright)
+        result:Result = get_flights(
+            flight_data=flight_data,
+            trip="one-way",
+            seat="economy",
+            passengers=passengers,
+            fetch_mode="local"
+        )
         print(result)
 
         # Ergebnisse für JSON-Response aufbereiten
@@ -55,13 +65,13 @@ def search():
         if result and result.flights:
             for flight in result.flights:
                 flights_list.append({
-                    'airline': flight.is_it_airline or "Airline",
+                    'airline': flight.name, # .name wird in aktueller Version verwendet
                     'price': flight.price,
                     'departure': flight.departure,
                     'arrival': flight.arrival,
                     'duration': flight.duration,
                     'stops': flight.stops,
-                    'link': flight.flight_url or "#"
+
                 })
 
         return jsonify({
