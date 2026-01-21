@@ -3,16 +3,18 @@
 <head>
     <meta charset="utf-8">
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
-    <title>TravelFolio 3D - Flight Search Edition</title>
+    <title>TravelFolio 3D - Ultimate Edition</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
 
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,1,0" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
 
+    <!-- Bibliotheken -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #020617; margin: 0; overflow: hidden; color: white; }
@@ -38,8 +40,16 @@
         .search-input:focus { border-color: #22d3ee; box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.2); }
 
         .passenger-counter { display: flex; align-items: center; justify-content: space-between; background: #0f172a; padding: 0.5rem 1rem; border-radius: 0.75rem; border: 1px solid #334155; }
-        .counter-btn { width: 28px; height: 28px; border-radius: 50%; background: #1e293b; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s; }
+        .counter-btn { width: 28px; height: 28px; border-radius: 50%; background: #1e293b; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s; pointer-events: auto; }
         .counter-btn:hover { background: #334155; }
+
+        .alert-card-slide { min-width: 380px; max-width: 380px; scroll-snap-align: start; }
+        .alert-card { background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 1.5rem; padding: 1.5rem; transition: all 0.3s ease; display: flex; flex-direction: column; height: 100%; }
+        .alert-card:hover { border-color: #22d3ee; background: rgba(30, 41, 59, 0.8); }
+        .price-chart-container { height: 120px; margin-top: 1rem; position: relative; }
+
+        .toast { position: fixed; bottom: 6rem; right: 2rem; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(20px); border: 1px solid rgba(34, 211, 238, 0.5); padding: 1rem 1.5rem; border-radius: 1rem; color: white; z-index: 9999; animation: slideIn 0.3s ease forwards; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
         .flight-result-card { background: rgba(30, 41, 59, 0.6); border: 1px solid #334155; padding: 1.25rem; border-radius: 1.25rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s; }
         .flight-result-card:hover { border-color: #22d3ee; background: rgba(30, 41, 59, 0.8); }
@@ -69,7 +79,7 @@
         </div>
     </div>
 
-    <!-- Notifications Dropdown -->
+    <!-- Benachrichtigungen -->
     <div id="notification-dropdown" class="absolute top-24 right-8 z-50 w-80 bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl pointer-events-auto hidden">
         <div class="p-4 border-b border-slate-700 font-bold">Benachrichtigungen</div>
         <div id="notif-content" class="p-2 max-h-96 overflow-y-auto no-scrollbar">
@@ -80,7 +90,7 @@
         </div>
     </div>
 
-    <!-- Home View -->
+    <!-- Home Ansicht -->
     <div id="view-home" class="ui-layer flex flex-col justify-end pb-32 transition-opacity duration-300">
         <div class="content-limit flex justify-start items-end px-8">
             <div class="flex gap-4 interactive">
@@ -96,49 +106,41 @@
         </div>
     </div>
 
-    <!-- Trips View -->
+    <!-- Planungs Ansicht -->
     <div id="view-trips" class="ui-layer bg-slate-900/80 backdrop-blur-xl pt-32 px-10 pb-32 interactive overflow-y-auto no-scrollbar hidden opacity-0 transition-opacity">
         <div class="content-limit">
             <div class="flex items-center justify-between mb-8">
                 <h1 id="view-title" class="text-4xl font-black text-white tracking-tight">Meine Planung</h1>
-                <div class="flex bg-slate-800 p-1 rounded-xl border border-slate-700">
-                    <button onclick="toggleTripTab('trips')" id="tab-trips" class="px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm transition-all">Reisen</button>
-                    <button onclick="toggleTripTab('alerts')" id="tab-alerts" class="px-6 py-2 rounded-lg text-slate-400 font-bold text-sm transition-all">Preisalarme</button>
+                <div class="flex items-center gap-4">
+                    <button id="add-alert-btn" onclick="showAddAlertModal()" class="hidden w-12 h-12 rounded-full bg-gradient-to-r from-cyan-400 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/40 hover:scale-110 active:scale-95 transition-all">
+                        <span class="material-symbols-outlined">add_alert</span>
+                    </button>
+                    <div class="flex bg-slate-800 p-1 rounded-xl border border-slate-700">
+                        <button onclick="toggleTripTab('trips')" id="tab-trips" class="px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm transition-all">Reisen</button>
+                        <button onclick="toggleTripTab('alerts')" id="tab-alerts" class="px-6 py-2 rounded-lg text-slate-400 font-bold text-sm transition-all">Preisalarme</button>
+                    </div>
                 </div>
             </div>
             <div id="trips-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
-            <div id="alerts-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden"></div>
+            <div id="alerts-container" class="hidden">
+                <div id="alerts-scroll-container" class="flex gap-6 overflow-x-auto pb-8 snap-x snap-mandatory no-scrollbar"></div>
+            </div>
         </div>
     </div>
 
-    <!-- Flight Search Modal -->
+    <!-- Modale -->
     <div id="add-trip-modal" class="absolute inset-0 z-[60] modal-bg flex items-center justify-center pointer-events-auto hidden opacity-0 transition-opacity duration-300">
         <div class="bg-slate-900 w-full max-w-3xl rounded-[2.5rem] p-10 border border-slate-700 shadow-2xl transform transition-transform translate-y-10 max-h-[92vh] flex flex-col overflow-hidden">
             <div class="flex justify-between items-center mb-8 shrink-0">
-                <div>
-                    <h2 class="text-3xl font-black text-white">Flugsuche</h2>
-                    <p class="text-slate-400 text-sm mt-1">Live-Angebote finden und Trips planen</p>
-                </div>
-                <button onclick="hideAddTripModal()" class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 transition">
-                    <span class="material-symbols-outlined">close</span>
-                </button>
+                <div><h2 class="text-3xl font-black text-white">Flugsuche</h2><p class="text-slate-400 text-sm mt-1">Live-Angebote finden</p></div>
+                <button onclick="hideAddTripModal()" class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 transition"><span class="material-symbols-outlined">close</span></button>
             </div>
-
             <div id="search-inputs" class="space-y-6 shrink-0 overflow-y-auto pr-2 no-scrollbar">
                 <div class="grid grid-cols-2 gap-6">
-                    <div>
-                        <label class="text-[10px] text-slate-500 uppercase font-black tracking-widest ml-1 mb-2 block">VON (IATA)</label>
-                        <input id="input-origin" type="text" placeholder="z.B. FRA" class="search-input uppercase font-bold" maxlength="3">
-                    </div>
-                    <div>
-                        <label class="text-[10px] text-slate-500 uppercase font-black tracking-widest ml-1 mb-2 block">NACH (IATA)</label>
-                        <input id="input-dest" type="text" placeholder="z.B. TYO" class="search-input uppercase font-bold" maxlength="3">
-                    </div>
+                    <input id="input-origin" type="text" placeholder="VON (FRA)" class="search-input uppercase font-bold" maxlength="3">
+                    <input id="input-dest" type="text" placeholder="NACH (TYO)" class="search-input uppercase font-bold" maxlength="3">
                 </div>
-                <div>
-                    <label class="text-[10px] text-slate-500 uppercase font-black tracking-widest ml-1 mb-2 block">Datum</label>
-                    <input id="input-start" type="date" class="search-input">
-                </div>
+                <input id="input-start" type="date" class="search-input">
 
                 <div>
                     <label class="text-[10px] text-slate-500 uppercase font-black tracking-widest ml-1 mb-2 block">Passagiere</label>
@@ -149,23 +151,40 @@
                     </div>
                 </div>
 
-                <button id="btn-search-trigger" class="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-black py-4 rounded-2xl shadow-lg transition-all" onclick="performSearch()">
-                    FLÜGE SUCHEN
-                </button>
+                <button class="w-full bg-cyan-500 text-slate-900 font-black py-4 rounded-2xl" onclick="performSearch()">FLÜGE SUCHEN</button>
             </div>
-
             <div id="search-results-area" class="mt-8 flex-1 overflow-y-auto no-scrollbar space-y-4 hidden border-t border-slate-800 pt-8">
                 <div id="results-list" class="space-y-4 pb-4"></div>
             </div>
         </div>
     </div>
 
-    <!-- Sidebar Detail -->
+    <div id="add-alert-modal" class="absolute inset-0 z-[60] modal-bg flex items-center justify-center pointer-events-auto hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-slate-900 w-full max-w-2xl rounded-[2.5rem] p-10 border border-slate-700 shadow-2xl transform transition-transform translate-y-10">
+            <div class="flex justify-between items-center mb-8">
+                <div><h2 class="text-3xl font-black text-white">Neuer Preisalarm</h2><p class="text-slate-400 text-sm mt-1">Überwache deine Traumroute</p></div>
+                <button onclick="hideAddAlertModal()" class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <div class="space-y-6">
+                <div class="grid grid-cols-2 gap-6">
+                    <input id="alert-origin" type="text" placeholder="VON (IATA)" class="search-input uppercase font-bold" maxlength="3">
+                    <input id="alert-dest" type="text" placeholder="NACH (IATA)" class="search-input uppercase font-bold" maxlength="3">
+                </div>
+                <div class="grid grid-cols-2 gap-6">
+                    <input id="alert-date" type="date" class="search-input">
+                    <input id="alert-target-price" type="number" placeholder="ZIELPREIS €" class="search-input">
+                </div>
+                <button onclick="createPriceAlert()" class="w-full bg-cyan-500 text-slate-900 font-black py-4 rounded-2xl shadow-lg">ALARM ERSTELLEN</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Details -->
     <div id="detail-sheet" class="pointer-events-auto">
         <div class="relative h-64 shrink-0">
             <img id="detail-img" src="" class="w-full h-full object-cover">
             <div class="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-slate-900"></div>
-            <button onclick="closeDetail()" class="absolute top-6 right-6 w-12 h-12 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/10 hover:bg-black/60 transition"><span class="material-symbols-outlined">close</span></button>
+            <button onclick="closeDetail()" class="absolute top-6 right-6 w-12 h-12 bg-black/40 rounded-full flex items-center justify-center text-white"><span class="material-symbols-outlined">close</span></button>
             <div class="absolute bottom-6 left-8 right-8">
                 <h2 id="detail-title" class="text-4xl font-black tracking-tight"></h2>
                 <p id="detail-date" class="text-slate-300 text-sm mt-1 uppercase font-bold tracking-widest"></p>
@@ -173,38 +192,25 @@
         </div>
         <div class="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar">
             <div id="detail-itinerary" class="space-y-4"></div>
-            <button class="w-full py-4 bg-white text-slate-900 font-black rounded-2xl shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all">BUCHUNG ABSCHLIESSEN</button>
             <button onclick="deleteCurrentTrip()" class="w-full py-4 text-red-400 text-xs font-black uppercase tracking-widest hover:bg-red-500/10 rounded-2xl transition-all">Reise entfernen</button>
         </div>
     </div>
 
-    <!-- Navigation Bar -->
+    <!-- Navigation -->
     <div class="absolute bottom-10 left-0 right-0 z-40 flex justify-center pointer-events-none">
         <div class="glass rounded-full px-8 py-4 flex items-center gap-10 pointer-events-auto border border-white/10 shadow-2xl">
-            <button onclick="switchView('home')" id="nav-home" class="flex flex-col items-center text-cyan-400 transition hover:scale-110"><span class="material-symbols-outlined text-3xl">public</span><span class="text-[8px] font-black uppercase">Home</span></button>
-            <button onclick="showAddTripModal()" class="w-16 h-16 rounded-full bg-gradient-to-r from-cyan-400 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/40 transform hover:scale-110 active:scale-95 transition-all"><span class="material-symbols-outlined text-4xl">add</span></button>
-            <button onclick="switchView('trips')" id="nav-trips" class="flex flex-col items-center text-slate-500 transition hover:scale-110"><span class="material-symbols-outlined text-3xl">event_note</span><span class="text-[8px] font-black uppercase">Planung</span></button>
+            <button onclick="switchView('home')" id="nav-home" class="flex flex-col items-center text-cyan-400"><span class="material-symbols-outlined text-3xl">public</span><span class="text-[8px] font-black uppercase">Home</span></button>
+            <button onclick="showAddTripModal()" class="w-16 h-16 rounded-full bg-gradient-to-r from-cyan-400 to-blue-600 flex items-center justify-center text-white shadow-lg"><span class="material-symbols-outlined text-4xl">add</span></button>
+            <button onclick="switchView('trips')" id="nav-trips" class="flex flex-col items-center text-slate-500"><span class="material-symbols-outlined text-3xl">event_note</span><span class="text-[8px] font-black uppercase">Planung</span></button>
         </div>
     </div>
 </div>
 
 <script>
-    // --- DATABASE & STATE ---
-    const cityDatabase = {
-        "FRA": {lat: 50.03, lon: 8.57}, "LHR": {lat: 51.47, lon: -0.45}, "TYO": {lat: 35.67, lon: 139.65}, "JFK": {lat: 40.64, lon: -73.77},
-        "BER": {lat: 52.36, lon: 13.50}, "CDG": {lat: 49.00, lon: 2.55}, "DXB": {lat: 25.25, lon: 55.36}
-    };
-
-    let trips = {};
-    let priceAlerts = [];
-    let passengerCounts = { adults: 1, children: 0, infants: 0 };
-    let currentDetailKey = null;
-
-    // --- THREE.JS ENGINE ---
+    // --- 1. GLOBE ENGINE MIT STERNEN, MOND (HEIGHT-MAP) & SONNE ---
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
     camera.position.z = 15;
-
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -214,75 +220,236 @@
     controls.enableDamping = true;
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.5;
-    // Zoom Limits
     controls.minDistance = 7;
-    controls.maxDistance = 30;
+    controls.maxDistance = 100;
 
-    const globeGroup = new THREE.Group(); scene.add(globeGroup);
-    const texLoad = new THREE.TextureLoader();
-
-    // Background Stars
+    // STERNE
     const starGeo = new THREE.BufferGeometry();
     const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05, transparent: true, opacity: 0.8 });
     const starVerts = [];
-    for(let i=0; i<5000; i++) starVerts.push((Math.random()-0.5)*150, (Math.random()-0.5)*150, (Math.random()-0.5)*150);
+    for(let i=0; i<5000; i++) starVerts.push((Math.random()-0.5)*400, (Math.random()-0.5)*400, (Math.random()-0.5)*400);
     starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts, 3));
     const stars = new THREE.Points(starGeo, starMat);
     scene.add(stars);
 
-    // Atmosphere Glow
+    const globeGroup = new THREE.Group(); scene.add(globeGroup);
+    const texLoad = new THREE.TextureLoader();
+
+    // Atmosphäre & Erde
     const atmosphere = new THREE.Mesh(
         new THREE.SphereGeometry(5.2, 64, 64),
         new THREE.MeshPhongMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.1, side: THREE.BackSide, blending: THREE.AdditiveBlending })
     );
     scene.add(atmosphere);
 
-    // Earth with Emissive City Lights
-    const earthMaterial = new THREE.MeshStandardMaterial({
-        map: texLoad.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg'),
-        emissiveMap: texLoad.load('https://unpkg.com/three-globe/example/img/earth-night.jpg'),
-        emissive: new THREE.Color(0xffffcc),
-        emissiveIntensity: 0.4,
-        roughness: 0.7, metalness: 0.2
-    });
-    const earth = new THREE.Mesh(new THREE.SphereGeometry(5, 64, 64), earthMaterial);
+    const earth = new THREE.Mesh(
+        new THREE.SphereGeometry(5, 64, 64),
+        new THREE.MeshStandardMaterial({
+            map: texLoad.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg'),
+            emissiveMap: texLoad.load('https://unpkg.com/three-globe/example/img/earth-night.jpg'),
+            emissive: new THREE.Color(0xffffcc), emissiveIntensity: 0.4
+        })
+    );
     globeGroup.add(earth);
 
-    // Lighting (Sun)
+    // REALISTISCHER MOND MIT HEIGHT-MAP (DISPLACEMENT)
+    const moonGeometry = new THREE.SphereGeometry(1.25, 128, 128); // Höhere Auflösung für Displacement
+    const moonTexture = texLoad.load('https://unpkg.com/three-globe/example/img/moon.jpg');
+    const moonMaterial = new THREE.MeshStandardMaterial({
+        map: moonTexture,
+        bumpMap: moonTexture,
+        bumpScale: 0.05,
+        displacementMap: moonTexture, // Height Map
+        displacementScale: 0.1,       // Stärke der Verformung
+        roughness: 1.0,
+        metalness: 0.0
+    });
+    const moon = new THREE.Mesh(moonGeometry, moonMaterial);
+    moon.rotation.x = Math.PI / 8;
+    scene.add(moon);
+
+    // SICHTBARE SONNE
+    const sunGeometry = new THREE.SphereGeometry(4, 64, 64);
+    const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xfff9e6 });
+    const sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
+    sunMesh.position.set(150, 80, 150);
+    scene.add(sunMesh);
+
+    // SONNEN-LICHT
     scene.add(new THREE.AmbientLight(0x333333));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-    sun.position.set(10, 5, 10);
-    scene.add(sun);
+    const sunLight = new THREE.DirectionalLight(0xffffff, 1.8);
+    sunLight.position.copy(sunMesh.position);
+    scene.add(sunLight);
 
     const markerGroup = new THREE.Group(); globeGroup.add(markerGroup);
 
+    // Hilfsfunktionen
     function latLonToPos(lat, lon, r) {
-        const phi = (90 - lat) * (Math.PI / 180);
-        const theta = (lon + 180) * (Math.PI / 180);
+        const phi = (90 - lat) * (Math.PI / 180), theta = (lon + 180) * (Math.PI / 180);
         return new THREE.Vector3(-(r * Math.sin(phi) * Math.cos(theta)), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta));
     }
 
-    // --- NEU: Bogen-Funktion ---
     function drawFlightPath(originCode, destCode) {
-        const origin = cityDatabase[originCode];
-        const dest = cityDatabase[destCode];
+        const origin = cityDatabase[originCode], dest = cityDatabase[destCode];
         if (!origin || !dest) return;
-
-        const start = latLonToPos(origin.lat, origin.lon, 5.05);
-        const end = latLonToPos(dest.lat, dest.lon, 5.05);
-
-        // Mittelpunkt berechnen und nach außen wölben für den Bogen
+        const start = latLonToPos(origin.lat, origin.lon, 5.05), end = latLonToPos(dest.lat, dest.lon, 5.05);
         const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-        const distance = start.distanceTo(end);
-        mid.setLength(5.05 + distance * 0.4); // Die Höhe des Bogens hängt von der Distanz ab
-
+        mid.setLength(5.05 + start.distanceTo(end) * 0.4);
         const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
-        const points = curve.getPoints(50);
-        const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        const material = new THREE.LineBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.6, linewidth: 2 });
-
-        const line = new THREE.Line(geometry, material);
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(50)), new THREE.LineBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.6 }));
         markerGroup.add(line);
+    }
+
+    // --- 2. DATEN & STATUS ---
+    const cityDatabase = { "FRA": {lat: 50.03, lon: 8.57}, "LHR": {lat: 51.47, lon: -0.45}, "TYO": {lat: 35.67, lon: 139.65}, "JFK": {lat: 40.64, lon: -73.77}, "BER": {lat: 52.36, lon: 13.50}, "DXB": {lat: 25.25, lon: 55.36}, "CDG": {lat: 49.00, lon: 2.55} };
+    let trips = {}, priceAlerts = [], currentDetailKey = null;
+    let passengerCounts = { adults: 1, children: 0, infants: 0 };
+
+    // --- 3. UI LOGIK ---
+
+    function switchView(v) {
+        ['home','trips'].forEach(id => {
+            const el = document.getElementById('view-'+id);
+            if(id===v) {
+                el.classList.remove('hidden');
+                setTimeout(()=>el.classList.remove('opacity-0'),10);
+                if(v==='trips') renderPlanning();
+            }
+            else {
+                el.classList.add('opacity-0');
+                setTimeout(()=>el.classList.add('hidden'),300);
+            }
+        });
+        document.getElementById('nav-home').className = v === 'home' ? 'flex flex-col items-center text-cyan-400' : 'flex flex-col items-center text-slate-500';
+        document.getElementById('nav-trips').className = v === 'trips' ? 'flex flex-col items-center text-cyan-400' : 'flex flex-col items-center text-slate-500';
+        controls.autoRotate = (v==='home');
+    }
+
+    function toggleTripTab(tab) {
+        const isAlerts = (tab === 'alerts');
+        document.getElementById('tab-trips').className = !isAlerts ? 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm transition-all' : 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm transition-all';
+        document.getElementById('tab-alerts').className = isAlerts ? 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm transition-all' : 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm transition-all';
+        document.getElementById('trips-container').classList.toggle('hidden', isAlerts);
+        document.getElementById('alerts-container').classList.toggle('hidden', !isAlerts);
+        document.getElementById('add-alert-btn').classList.toggle('hidden', !isAlerts);
+        if(isAlerts) renderAlerts();
+    }
+
+    // --- 4. PREISALARM LOGIK ---
+
+    function createPriceAlert() {
+        const origin = document.getElementById('alert-origin').value.toUpperCase();
+        const dest = document.getElementById('alert-dest').value.toUpperCase();
+        const target = document.getElementById('alert-target-price').value;
+
+        if(!origin || !dest || !target) return showToast("Bitte alle Felder ausfüllen!");
+
+        const newAlert = {
+            id: Date.now(),
+            origin, dest,
+            targetPrice: target,
+            currentPrice: Math.floor(target * (1 + Math.random() * 0.3)),
+            history: Array.from({length: 10}, () => Math.floor(target * (1 + Math.random() * 0.5)))
+        };
+
+        priceAlerts.push(newAlert);
+        hideAddAlertModal();
+        renderAlerts();
+        showToast(`Preisalarm für ${dest} erstellt!`);
+    }
+
+    function renderAlerts() {
+        const container = document.getElementById('alerts-scroll-container');
+        container.innerHTML = priceAlerts.length ? '' : '<p class="text-slate-500 w-full text-center py-20 font-bold uppercase tracking-widest text-xs">Keine Alarme aktiv.</p>';
+
+        priceAlerts.forEach(alert => {
+            const card = document.createElement('div');
+            card.className = 'alert-card-slide snap-start';
+            card.innerHTML = `
+                <div class="alert-card">
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <h3 class="text-xl font-black">${alert.origin} → ${alert.dest}</h3>
+                            <p class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Ziel: ${alert.targetPrice}€</p>
+                        </div>
+                        <button onclick="deleteAlert(${alert.id})" class="text-red-500 hover:scale-110 transition p-1"><span class="material-symbols-outlined">delete</span></button>
+                    </div>
+                    <div class="flex-1 price-chart-container">
+                        <canvas id="chart-${alert.id}"></canvas>
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-white/5 flex justify-between items-center">
+                        <span class="text-xs text-slate-400">Aktuell: <b class="text-white text-lg ml-1">${alert.currentPrice}€</b></span>
+                        <div class="px-3 py-1 ${alert.currentPrice <= alert.targetPrice ? 'bg-green-500/20 text-green-400' : 'bg-orange-500/20 text-orange-400'} text-[10px] font-bold rounded-full uppercase">
+                            ${alert.currentPrice <= alert.targetPrice ? 'Guter Preis' : 'Warten'}
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.appendChild(card);
+            initAlertChart(alert);
+        });
+    }
+
+    function initAlertChart(alert) {
+        const ctx = document.getElementById(`chart-${alert.id}`).getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: Array.from({length: alert.history.length}, (_, i) => i),
+                datasets: [{
+                    data: alert.history,
+                    borderColor: '#22d3ee',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    fill: true,
+                    backgroundColor: 'rgba(34, 211, 238, 0.05)'
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: { x: { display: false }, y: { display: false } }
+            }
+        });
+    }
+
+    // --- 5. SYSTEM HELPERS ---
+
+    function updateCounter(type, delta) {
+        passengerCounts[type] = Math.max(type === 'adults' ? 1 : 0, passengerCounts[type] + delta);
+        document.getElementById(`count-${type}`).innerText = passengerCounts[type];
+    }
+
+    function performSearch() {
+        const dest = document.getElementById('input-dest').value.toUpperCase();
+        const origin = document.getElementById('input-origin').value.toUpperCase();
+        if(!dest || !origin) return;
+
+        document.getElementById('search-results-area').classList.remove('hidden');
+        document.getElementById('results-list').innerHTML = `
+            <div class="flight-result-card">
+                <div><p class="font-bold">Direktflug</p><p class="text-[10px] text-slate-500">Economy • 11h 20m</p></div>
+                <div class="text-right">
+                    <p class="text-xl font-black">420€</p>
+                    <button onclick="saveTrip('${dest}', 'Airline', '420€', '${origin}')" class="bg-cyan-500 text-slate-900 px-3 py-1 rounded-lg text-[10px] font-bold mt-1">PLANEN</button>
+                </div>
+            </div>
+        `;
+        drawFlightPath(origin, dest);
+    }
+
+    function saveTrip(dest, airline, price, origin) {
+        const id = 't_' + Date.now();
+        const coords = cityDatabase[dest] || {lat: 48, lon: 11};
+        trips[id] = {
+            title: dest, date: 'MAI 2025', lat: coords.lat, lon: coords.lon,
+            img: `https://loremflickr.com/400/300/city,${dest}`,
+            itinerary: [{title: 'Hinflug', desc: airline + ' - ' + price}, {title: 'Passagiere', desc: `${passengerCounts.adults} Erw., ${passengerCounts.children} Kind, ${passengerCounts.infants} Baby`}]
+        };
+        renderMarkers();
+        hideAddTripModal();
+        showToast(`Trip nach ${dest} gespeichert!`);
     }
 
     function renderMarkers() {
@@ -291,131 +458,9 @@
             const t = trips[key];
             const m = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), new THREE.MeshBasicMaterial({ color: 0x22d3ee }));
             m.position.copy(latLonToPos(t.lat, t.lon, 5.05));
-            m.userData = { key };
             markerGroup.add(m);
         });
         document.getElementById('stat-count').innerText = Object.keys(trips).length;
-    }
-
-    function animate(t) {
-        requestAnimationFrame(animate);
-        TWEEN.update();
-        controls.update();
-        stars.rotation.y -= 0.0001;
-        earthMaterial.emissiveIntensity = 0.3 + Math.sin(t * 0.001) * 0.1;
-        renderer.render(scene, camera);
-    }
-    animate();
-
-    // --- UI HELPERS ---
-
-    function updateCounter(type, delta) {
-        passengerCounts[type] = Math.max(type === 'adults' ? 1 : 0, passengerCounts[type] + delta);
-        document.getElementById(`count-${type}`).innerText = passengerCounts[type];
-    }
-
-    async function performSearch() {
-        const origin = document.getElementById('input-origin').value.trim().toUpperCase();
-        const dest = document.getElementById('input-dest').value.trim().toUpperCase();
-        const date = document.getElementById('input-start').value;
-        const btn = document.getElementById('btn-search-trigger');
-
-        if(!origin || !dest || !date) return;
-
-        btn.disabled = true;
-        btn.innerHTML = `<div class="flex items-center justify-center gap-2"><div class="loading-ring"></div> SUCHE...</div>`;
-
-        try {
-            const res = await fetch('/api/search', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ origin, destination: dest, date, passengers: passengerCounts })
-            });
-            const data = await res.json();
-
-            // Marker leeren vor neuer Suche, um Route zu visualisieren
-            while(markerGroup.children.length > 0) markerGroup.remove(markerGroup.children[0]);
-
-            if(data.success && data.flights.length > 0) {
-                renderResults(data.flights, dest, origin);
-                drawFlightPath(origin, dest); // Bogen zeichnen
-                flyTo(cityDatabase[dest]?.lat || 0, cityDatabase[dest]?.lon || 0);
-            } else {
-                mockSearch(dest, origin);
-            }
-        } catch(e) { mockSearch(dest, origin); }
-        finally { btn.disabled = false; btn.innerText = "FLÜGE SUCHEN"; }
-    }
-
-    function mockSearch(cityName, originName) {
-        const dummyData = [
-            { airline: 'Lufthansa', price: '420€', departure: '10:30', duration: '11h 20m' },
-            { airline: 'Emirates', price: '389€', departure: '21:15', duration: '13h 05m' }
-        ];
-        renderResults(dummyData, cityName, originName);
-        drawFlightPath(originName, cityName);
-    }
-
-    function renderResults(flights, cityName, originName) {
-        const area = document.getElementById('search-results-area');
-        const list = document.getElementById('results-list');
-        area.classList.remove('hidden'); list.innerHTML = '';
-
-        flights.forEach(f => {
-            list.innerHTML += `
-                <div class="flight-result-card">
-                    <div class="flex items-center gap-4">
-                        <div class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center font-black text-cyan-400 border border-slate-700">${f.airline.substring(0,2)}</div>
-                        <div><p class="font-bold text-white text-sm">${f.airline}</p><p class="text-[9px] text-slate-500 uppercase">${f.departure} • ${f.duration}</p></div>
-                    </div>
-                    <div class="text-right flex items-center gap-4">
-                        <p class="text-lg font-black text-white">${f.price}</p>
-                        <div class="flex flex-col gap-1">
-                            <button onclick="saveTrip('${cityName}', '${f.airline}', '${f.price}', '${originName}')" class="px-3 py-1 bg-cyan-500 text-slate-900 rounded-lg font-black text-[9px] uppercase">Planen</button>
-                            <button onclick="addAlert('${cityName}', '${f.price}')" class="px-3 py-1 border border-slate-700 rounded-lg font-black text-[9px] uppercase">Alarm</button>
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-    }
-
-    function saveTrip(dest, airline, price, origin) {
-        const id = 't_' + Date.now();
-        const coords = cityDatabase[dest] || {lat: 48 + Math.random()*5, lon: 10 + Math.random()*5};
-        trips[id] = {
-            title: dest, origin: origin, date: 'MAI 2025', lat: coords.lat, lon: coords.lon,
-            img: `https://loremflickr.com/800/600/city,${dest}?lock=${Math.floor(Math.random()*100)}`,
-            itinerary: [{title: 'Hinflug', desc: `${airline} • ${price}`}, {title: 'Planung', desc: 'Hotel-Recherche aktiv'}]
-        };
-        renderMarkers();
-        if (origin) drawFlightPath(origin, dest);
-        hideAddTripModal();
-        flyTo(coords.lat, coords.lon);
-    }
-
-    function addAlert(dest, price) {
-        priceAlerts.push({ id: Date.now(), dest, price });
-        hideAddTripModal();
-        document.getElementById('notif-badge').classList.remove('hidden');
-    }
-
-    function flyTo(lat, lon) {
-        controls.autoRotate = false;
-        const targetPos = latLonToPos(lat, lon, camera.position.length());
-        new TWEEN.Tween(camera.position).to({ x: targetPos.x, y: targetPos.y, z: targetPos.z }, 1500)
-            .easing(TWEEN.Easing.Cubic.InOut).onUpdate(()=>camera.lookAt(0,0,0)).start();
-    }
-
-    function switchView(v) {
-        ['home','trips'].forEach(id => {
-            const el = document.getElementById('view-'+id);
-            if(id===v) { el.classList.remove('hidden'); setTimeout(()=>el.classList.remove('opacity-0'),10); if(v==='trips') renderPlanning(); }
-            else { el.classList.add('opacity-0'); setTimeout(()=>el.classList.add('hidden'),300); }
-        });
-        document.getElementById('nav-home').className = v === 'home' ? 'flex flex-col items-center text-cyan-400' : 'flex flex-col items-center text-slate-500';
-        document.getElementById('nav-trips').className = v === 'trips' ? 'flex flex-col items-center text-cyan-400' : 'flex flex-col items-center text-slate-500';
-        controls.autoRotate = (v==='home');
     }
 
     function renderPlanning() {
@@ -423,27 +468,11 @@
         Object.keys(trips).forEach(k => {
             const t = trips[k];
             c.innerHTML += `
-                <div class="glass-card rounded-3xl overflow-hidden cursor-pointer" onclick="openDetail('${k}'); flyTo(${t.lat}, ${t.lon})">
+                <div class="glass-card rounded-3xl overflow-hidden cursor-pointer" onclick="openDetail('${k}')">
                     <img src="${t.img}" class="h-40 w-full object-cover">
                     <div class="p-6"><h3 class="font-black text-xl">${t.title}</h3><p class="text-xs text-slate-400 uppercase font-bold tracking-widest">${t.date}</p></div>
                 </div>
             `;
-        });
-    }
-
-    function toggleTripTab(tab) {
-        document.getElementById('tab-trips').className = tab === 'trips' ? 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm' : 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm';
-        document.getElementById('tab-alerts').className = tab === 'alerts' ? 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm' : 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm';
-        document.getElementById('trips-container').classList.toggle('hidden', tab !== 'trips');
-        document.getElementById('alerts-container').classList.toggle('hidden', tab !== 'alerts');
-        if(tab === 'alerts') renderAlerts();
-    }
-
-    function renderAlerts() {
-        const c = document.getElementById('alerts-container');
-        c.innerHTML = priceAlerts.length ? '' : '<p class="text-center col-span-full py-20 text-slate-500 font-bold uppercase text-xs tracking-widest">Keine Alarme gesetzt</p>';
-        priceAlerts.forEach(a => {
-            c.innerHTML += `<div class="glass-card rounded-3xl p-8 flex justify-between items-center"><div class="flex items-center gap-4"><div class="w-12 h-12 bg-cyan-500/20 text-cyan-400 rounded-full flex items-center justify-center"><span class="material-symbols-outlined">notifications_active</span></div><div><h3 class="font-black text-2xl">${a.dest}</h3><p class="text-[10px] text-slate-500 uppercase font-black">Preisüberwachung aktiv</p></div></div><p class="text-2xl font-black text-white">${a.price}</p></div>`;
         });
     }
 
@@ -457,20 +486,46 @@
         document.getElementById('detail-sheet').classList.add('open');
     }
 
-    function closeDetail() { document.getElementById('detail-sheet').classList.remove('open'); }
+    function showToast(msg) {
+        const t = document.createElement('div'); t.className = 'toast'; t.innerText = msg;
+        document.body.appendChild(t);
+        setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2500);
+    }
+
+    function animate(t) {
+        requestAnimationFrame(animate);
+        TWEEN.update();
+        controls.update();
+
+        // STERNE ROTATION
+        stars.rotation.y -= 0.0001;
+
+        // MOND ORBIT
+        const moonOrbitSpeed = t * 0.0002;
+        const moonDistance = 22;
+        moon.position.x = Math.cos(moonOrbitSpeed) * moonDistance;
+        moon.position.z = Math.sin(moonOrbitSpeed) * moonDistance;
+        moon.rotation.y += 0.0015;
+
+        renderer.render(scene, camera);
+    }
+
+    // Modal Funktionen
     function showAddTripModal() { document.getElementById('add-trip-modal').classList.remove('hidden'); setTimeout(()=>document.getElementById('add-trip-modal').classList.remove('opacity-0'),10); }
     function hideAddTripModal() { document.getElementById('add-trip-modal').classList.add('opacity-0'); setTimeout(()=>document.getElementById('add-trip-modal').classList.add('hidden'),300); }
-    function toggleNotifications() { document.getElementById('notification-dropdown').classList.toggle('hidden'); document.getElementById('notif-badge').classList.add('hidden'); }
+    function showAddAlertModal() { document.getElementById('add-alert-modal').classList.remove('hidden'); setTimeout(()=>document.getElementById('add-alert-modal').classList.remove('opacity-0'),10); }
+    function hideAddAlertModal() { document.getElementById('add-alert-modal').classList.add('opacity-0'); setTimeout(()=>document.getElementById('add-alert-modal').classList.add('hidden'),300); }
+    function closeDetail() { document.getElementById('detail-sheet').classList.remove('open'); }
+    function toggleNotifications() { document.getElementById('notification-dropdown').classList.toggle('hidden'); }
+    function deleteAlert(id) { priceAlerts = priceAlerts.filter(a => a.id !== id); renderAlerts(); showToast("Alarm gelöscht"); }
     function deleteCurrentTrip() { if(currentDetailKey) { delete trips[currentDetailKey]; renderMarkers(); renderPlanning(); closeDetail(); } }
 
-    window.addEventListener('click', e => {
-        const mouse = new THREE.Vector2((e.clientX/window.innerWidth)*2-1, -(e.clientY/window.innerHeight)*2+1);
-        const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
-        const hits = raycaster.intersectObjects(markerGroup.children);
-        if(hits.length>0) { const key = hits[0].object.userData.key; if(key) { openDetail(key); flyTo(trips[key].lat, trips[key].lon); } }
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
     });
-
-    window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+    animate();
 </script>
 </body>
 </html>
