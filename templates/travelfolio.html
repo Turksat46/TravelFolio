@@ -575,8 +575,8 @@
     // 1. Sun Core
     const sunGeo = new THREE.SphereGeometry(3, 32, 32);
     const sunMat = new THREE.MeshBasicMaterial({ color: 0xffddaa });
-    const sunMesh = new THREE.Mesh(sunGeo, sunMat);
-    sunGroup.add(sunMesh);
+    const sunCore = new THREE.Mesh(sunGeo, sunMat);
+    sunGroup.add(sunCore);
 
     // 2. Sun Glow (Sprite)
     const textureLoader = new THREE.TextureLoader();
@@ -602,9 +602,9 @@
         roughness: 0.8,
         metalness: 0.1
     });
-    const moon = new THREE.Mesh(moonGeo, moonMat);
-    moon.position.set(20, 0, 0); // Distance from Earth
-    moonGroup.add(moon);
+    const moonMesh = new THREE.Mesh(moonGeo, moonMat);
+    moonMesh.position.set(20, 0, 0); // Distance from Earth
+    moonGroup.add(moonMesh);
 
     const markerGroup = new THREE.Group(); globeGroup.add(markerGroup);
 
