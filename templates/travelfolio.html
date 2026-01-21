@@ -254,14 +254,16 @@
 
     // REALISTISCHER MOND MIT HEIGHT-MAP (DISPLACEMENT)
     const moonGeometry = new THREE.SphereGeometry(1.25, 128, 128); // Höhere Auflösung für Displacement
-    const moonTexture = texLoad.load('https://unpkg.com/three-globe/example/img/moon.jpg');
+    const moonTexture = texLoad.load('/static/moon.jpg');
     const moonMaterial = new THREE.MeshStandardMaterial({
         map: moonTexture,
         bumpMap: moonTexture,
-        bumpScale: 0.05,
+        bumpScale: 0.08,              // Erhöhte Bump-Intensität für mehr Details
+        normalMap: moonTexture,       // Normal Map für Oberflächendetails
+        normalScale: new THREE.Vector2(0.8, 0.8),
         displacementMap: moonTexture, // Height Map
-        displacementScale: 0.1,       // Stärke der Verformung
-        roughness: 1.0,
+        displacementScale: 0.15,      // Erhöhte Verformung für sichtbare Krater
+        roughness: 0.95,              // Leicht reduziert für subtilen Glanz
         metalness: 0.0
     });
     const moon = new THREE.Mesh(moonGeometry, moonMaterial);
