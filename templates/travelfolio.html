@@ -538,10 +538,33 @@
     const earth = new THREE.Mesh(new THREE.SphereGeometry(5, 64, 64), earthMaterial);
     globeGroup.add(earth);
 
-    // Lighting (Sun)
-    scene.add(new THREE.AmbientLight(0x111111));
-    const sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
-    sunLight.position.set(50, 20, 30);
+    // REALISTISCHER MOND MIT HEIGHT-MAP (DISPLACEMENT)
+    const moonGeometry = new THREE.SphereGeometry(1.25, 128, 128); // Höhere Auflösung für Displacement
+    const moonTexture = texLoad.load('https://unpkg.com/three-globe/example/img/moon.jpg');
+    const moonMaterial = new THREE.MeshStandardMaterial({
+        map: moonTexture,
+        bumpMap: moonTexture,
+        bumpScale: 0.05,
+        displacementMap: moonTexture, // Height Map
+        displacementScale: 0.1,       // Stärke der Verformung
+        roughness: 1.0,
+        metalness: 0.0
+    });
+    const moon = new THREE.Mesh(moonGeometry, moonMaterial);
+    moon.rotation.x = Math.PI / 8;
+    scene.add(moon);
+
+    // SICHTBARE SONNE
+    const sunGeometry = new THREE.SphereGeometry(4, 64, 64);
+    const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xfff9e6 });
+    const sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
+    sunMesh.position.set(150, 80, 150);
+    scene.add(sunMesh);
+
+    // SONNEN-LICHT
+    scene.add(new THREE.AmbientLight(0x333333));
+    const sunLight = new THREE.DirectionalLight(0xffffff, 1.8);
+    sunLight.position.copy(sunMesh.position);
     scene.add(sunLight);
 
     // --- REALISTIC SUN MESH ---
