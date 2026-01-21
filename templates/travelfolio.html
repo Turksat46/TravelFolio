@@ -3,58 +3,324 @@
 <head>
     <meta charset="utf-8">
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
-    <title>TravelFolio 3D - Ultimate Edition</title>
+    <title>TravelFolio 3D - Flight Search Edition</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
 
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,1,0" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
 
-    <!-- Bibliotheken -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #020617; margin: 0; overflow: hidden; color: white; }
-        #app-container { width: 100vw; height: 100vh; position: relative; background-color: #0f172a; overflow: hidden; }
-        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; background: radial-gradient(circle at center, #1e293b 0%, #020617 100%); }
+        /* --- Material 3 Expressive-ish Theme Tokens --- */
+        :root {
+            --bg: #020617;
+            --surface: rgba(15, 23, 42, 0.72);
+            --surface-2: rgba(30, 41, 59, 0.55);
+            --surface-3: rgba(51, 65, 85, 0.35);
+            --stroke: rgba(255, 255, 255, 0.12);
+            --stroke-2: rgba(148, 163, 184, 0.26);
+            --text: rgba(255,255,255,0.96);
+            --text-2: rgba(226,232,240,0.86);
+            --muted: rgba(148,163,184,0.82);
+
+            --primary: #22d3ee;
+            --primary-2: #3b82f6;
+            --primary-ink: #081018;
+
+            --radius-xl: 28px;
+            --radius-lg: 20px;
+            --radius-md: 14px;
+
+            --easing-expressive: cubic-bezier(0.16, 1, 0.3, 1);
+            --easing-standard: cubic-bezier(0.2, 0, 0, 1);
+
+            --shadow-1: 0 10px 30px rgba(0,0,0,0.35);
+            --shadow-2: 0 18px 60px rgba(0,0,0,0.5);
+            --glow: 0 0 0 1px rgba(34,211,238,0.18), 0 0 40px rgba(34,211,238,0.18);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            overflow: hidden;
+            color: var(--text);
+        }
+
+        /* Subtle animated background sheen */
+        body::before {
+            content: "";
+            position: fixed;
+            inset: -40vh -40vw;
+            background:
+                radial-gradient(50% 50% at 20% 20%, rgba(34,211,238,0.14), transparent 60%),
+                radial-gradient(50% 50% at 80% 25%, rgba(59,130,246,0.12), transparent 60%),
+                radial-gradient(40% 40% at 40% 80%, rgba(99,102,241,0.10), transparent 60%);
+            filter: blur(10px);
+            opacity: 0.9;
+            transform: translate3d(0,0,0);
+            animation: bgFloat 18s var(--easing-expressive) infinite alternate;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        @keyframes bgFloat {
+            0% { transform: translate3d(-1.5%, -1.5%, 0) scale(1.02); }
+            100% { transform: translate3d(1.5%, 1.2%, 0) scale(1.06); }
+        }
+
+        #app-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            background-color: #0f172a;
+            overflow: hidden;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            background: radial-gradient(circle at center, #1e293b 0%, #020617 100%);
+        }
 
         .ui-layer { position: absolute; z-index: 10; pointer-events: none; width: 100%; height: 100%; }
         .content-limit { max-width: 1200px; margin: 0 auto; width: 100%; height: 100%; position: relative; }
         .interactive { pointer-events: auto; }
 
-        .glass { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(20px); border-top: 1px solid rgba(255, 255, 255, 0.1); }
-        .glass-card { background: rgba(30, 41, 59, 0.45); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3); transition: all 0.3s ease; }
-        .glass-card:hover { transform: translateY(-2px); background: rgba(30, 41, 59, 0.6); }
+        /* Glass surfaces */
+        .glass {
+            background: var(--surface);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--stroke);
+        }
+
+        .glass-card {
+            background: var(--surface-2);
+            backdrop-filter: blur(14px);
+            border: 1px solid var(--stroke);
+            box-shadow: var(--shadow-1);
+            transition: transform 300ms var(--easing-expressive), background 300ms var(--easing-expressive), border-color 250ms var(--easing-standard), box-shadow 300ms var(--easing-expressive);
+            will-change: transform;
+        }
+
+        .glass-card:hover {
+            transform: translateY(-3px) scale(1.01);
+            background: rgba(30, 41, 59, 0.68);
+            border-color: rgba(34,211,238,0.40);
+            box-shadow: var(--shadow-2);
+        }
 
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-        #detail-sheet { position: absolute; right: 24px; top: 100px; bottom: 100px; width: 420px; z-index: 50; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(20px); border-radius: 24px; border: 1px solid rgba(255, 255, 255, 0.1); transform: translateX(125%); transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: -20px 0 50px rgba(0,0,0,0.5); display: flex; flex-direction: column; overflow: hidden; }
-        #detail-sheet.open { transform: translateX(0); }
+        /* Modal / sheet motion */
+        #detail-sheet {
+            position: absolute;
+            right: 24px;
+            top: 100px;
+            bottom: 100px;
+            width: 420px;
+            z-index: 50;
+            background: rgba(15, 23, 42, 0.92);
+            backdrop-filter: blur(22px);
+            border-radius: 26px;
+            border: 1px solid var(--stroke);
+            transform: translateX(125%) scale(0.98);
+            opacity: 0;
+            transition: transform 650ms var(--easing-expressive), opacity 450ms var(--easing-standard);
+            box-shadow: -20px 0 60px rgba(0,0,0,0.55);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
 
-        .modal-bg { background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); }
-        .search-input { width: 100%; background: #1e293b; padding: 0.85rem; border-radius: 0.75rem; border: 1px solid #334155; color: white; outline: none; transition: all 0.2s; font-size: 0.9rem; }
-        .search-input:focus { border-color: #22d3ee; box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.2); }
+        #detail-sheet.open {
+            transform: translateX(0) scale(1);
+            opacity: 1;
+        }
 
-        .passenger-counter { display: flex; align-items: center; justify-content: space-between; background: #0f172a; padding: 0.5rem 1rem; border-radius: 0.75rem; border: 1px solid #334155; }
-        .counter-btn { width: 28px; height: 28px; border-radius: 50%; background: #1e293b; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s; pointer-events: auto; }
-        .counter-btn:hover { background: #334155; }
+        .modal-bg {
+            background: rgba(0,0,0,0.78);
+            backdrop-filter: blur(10px);
+        }
 
-        .alert-card-slide { min-width: 380px; max-width: 380px; scroll-snap-align: start; }
-        .alert-card { background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 1.5rem; padding: 1.5rem; transition: all 0.3s ease; display: flex; flex-direction: column; height: 100%; }
-        .alert-card:hover { border-color: #22d3ee; background: rgba(30, 41, 59, 0.8); }
-        .price-chart-container { height: 120px; margin-top: 1rem; position: relative; }
+        /* Motion reduce accessibility */
+        @media (prefers-reduced-motion: reduce) {
+            * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+        }
 
-        .toast { position: fixed; bottom: 6rem; right: 2rem; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(20px); border: 1px solid rgba(34, 211, 238, 0.5); padding: 1rem 1.5rem; border-radius: 1rem; color: white; z-index: 9999; animation: slideIn 0.3s ease forwards; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
-        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        /* Inputs/Buttons – more M3-like */
+        .search-input {
+            width: 100%;
+            background: linear-gradient(180deg, rgba(30,41,59,0.9), rgba(30,41,59,0.72));
+            padding: 0.95rem 1rem;
+            border-radius: 1rem;
+            border: 1px solid rgba(148,163,184,0.22);
+            color: white;
+            outline: none;
+            transition: border-color 220ms var(--easing-standard), box-shadow 260ms var(--easing-expressive), transform 220ms var(--easing-standard), background 260ms var(--easing-expressive);
+            font-size: 0.92rem;
+        }
 
-        .flight-result-card { background: rgba(30, 41, 59, 0.6); border: 1px solid #334155; padding: 1.25rem; border-radius: 1.25rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s; }
-        .flight-result-card:hover { border-color: #22d3ee; background: rgba(30, 41, 59, 0.8); }
+        .search-input:hover {
+            border-color: rgba(148,163,184,0.34);
+            transform: translateY(-1px);
+        }
 
-        .loading-ring { border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid #22d3ee; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        .search-input:focus {
+            border-color: rgba(34, 211, 238, 0.65);
+            box-shadow: var(--glow);
+        }
+
+        .search-input::placeholder { color: rgba(148,163,184,0.75); }
+
+        /* Pill counters */
+        .passenger-counter {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(2,6,23,0.55);
+            padding: 0.6rem 0.9rem;
+            border-radius: 1rem;
+            border: 1px solid rgba(148,163,184,0.20);
+            transition: border-color 220ms var(--easing-standard), transform 220ms var(--easing-standard), background 260ms var(--easing-expressive);
+        }
+
+        .passenger-counter:hover {
+            transform: translateY(-1px);
+            border-color: rgba(34,211,238,0.35);
+            background: rgba(2,6,23,0.66);
+        }
+
+        .counter-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 999px;
+            background: rgba(30,41,59,0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 160ms var(--easing-standard), background 220ms var(--easing-expressive), box-shadow 220ms var(--easing-expressive);
+            user-select: none;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .counter-btn:hover { background: rgba(51,65,85,0.95); transform: translateY(-1px) scale(1.03); }
+        .counter-btn:active { transform: scale(0.96); }
+
+        /* Expressive primary button */
+        #btn-search-trigger {
+            position: relative;
+            overflow: hidden;
+            border-radius: 1.25rem;
+            transform: translateZ(0);
+            transition: transform 240ms var(--easing-expressive), filter 240ms var(--easing-standard), box-shadow 320ms var(--easing-expressive);
+            box-shadow: 0 14px 50px rgba(34,211,238,0.20);
+        }
+
+        #btn-search-trigger:hover {
+            transform: translateY(-2px) scale(1.01);
+            box-shadow: 0 22px 70px rgba(34,211,238,0.24);
+            filter: saturate(1.06);
+        }
+
+        #btn-search-trigger:active { transform: translateY(0) scale(0.985); }
+
+        /* Ripple effect helper */
+        .ripple {
+            position: absolute;
+            border-radius: 999px;
+            transform: scale(0);
+            animation: ripple 650ms var(--easing-expressive);
+            background: rgba(255,255,255,0.28);
+            pointer-events: none;
+            mix-blend-mode: overlay;
+        }
+
+        @keyframes ripple {
+            to { transform: scale(4.2); opacity: 0; }
+        }
+
+        /* Flight result cards motion */
+        .flight-result-card {
+            background: rgba(30, 41, 59, 0.55);
+            border: 1px solid rgba(148,163,184,0.20);
+            padding: 1.25rem;
+            border-radius: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: transform 260ms var(--easing-expressive), border-color 220ms var(--easing-standard), background 260ms var(--easing-expressive);
+        }
+
+        .flight-result-card:hover {
+            border-color: rgba(34,211,238,0.45);
+            background: rgba(30, 41, 59, 0.76);
+            transform: translateY(-2px);
+        }
+
+        /* Sheet & modal content entrance */
+        .enter-pop {
+            animation: enterPop 520ms var(--easing-expressive) both;
+        }
+
+        @keyframes enterPop {
+            0% { transform: translateY(14px) scale(0.98); opacity: 0; }
+            100% { transform: translateY(0) scale(1); opacity: 1; }
+        }
+
+        /* Toast */
+        #toast {
+            position: fixed;
+            left: 50%;
+            bottom: 22px;
+            transform: translateX(-50%) translateY(20px);
+            opacity: 0;
+            z-index: 80;
+            pointer-events: none;
+            transition: transform 420ms var(--easing-expressive), opacity 280ms var(--easing-standard);
+        }
+
+        #toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .toast-card {
+            background: rgba(15,23,42,0.82);
+            border: 1px solid rgba(148,163,184,0.22);
+            border-radius: 999px;
+            padding: 10px 14px;
+            box-shadow: var(--shadow-2);
+            backdrop-filter: blur(16px);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: rgba(226,232,240,0.95);
+        }
+
+        .loading-ring {
+            border: 3px solid rgba(255,255,255,0.12);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
@@ -62,6 +328,14 @@
 
 <div id="app-container">
     <div id="canvas-container"></div>
+
+    <!-- Toast -->
+    <div id="toast" aria-live="polite" aria-atomic="true">
+        <div class="toast-card">
+            <span class="material-symbols-outlined" style="color: rgba(34,211,238,0.95)">auto_awesome</span>
+            <span id="toast-text" class="text-sm font-semibold">Gespeichert</span>
+        </div>
+    </div>
 
     <!-- Header UI -->
     <div class="absolute top-0 left-0 right-0 z-40 pt-8 pb-4 px-8 bg-gradient-to-b from-slate-900/90 to-transparent pointer-events-none">
@@ -79,7 +353,7 @@
         </div>
     </div>
 
-    <!-- Benachrichtigungen -->
+    <!-- Notifications Dropdown -->
     <div id="notification-dropdown" class="absolute top-24 right-8 z-50 w-80 bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl pointer-events-auto hidden">
         <div class="p-4 border-b border-slate-700 font-bold">Benachrichtigungen</div>
         <div id="notif-content" class="p-2 max-h-96 overflow-y-auto no-scrollbar">
@@ -90,7 +364,7 @@
         </div>
     </div>
 
-    <!-- Home Ansicht -->
+    <!-- Home View -->
     <div id="view-home" class="ui-layer flex flex-col justify-end pb-32 transition-opacity duration-300">
         <div class="content-limit flex justify-start items-end px-8">
             <div class="flex gap-4 interactive">
@@ -106,41 +380,49 @@
         </div>
     </div>
 
-    <!-- Planungs Ansicht -->
+    <!-- Trips View -->
     <div id="view-trips" class="ui-layer bg-slate-900/80 backdrop-blur-xl pt-32 px-10 pb-32 interactive overflow-y-auto no-scrollbar hidden opacity-0 transition-opacity">
         <div class="content-limit">
             <div class="flex items-center justify-between mb-8">
                 <h1 id="view-title" class="text-4xl font-black text-white tracking-tight">Meine Planung</h1>
-                <div class="flex items-center gap-4">
-                    <button id="add-alert-btn" onclick="showAddAlertModal()" class="hidden w-12 h-12 rounded-full bg-gradient-to-r from-cyan-400 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/40 hover:scale-110 active:scale-95 transition-all">
-                        <span class="material-symbols-outlined">add_alert</span>
-                    </button>
-                    <div class="flex bg-slate-800 p-1 rounded-xl border border-slate-700">
-                        <button onclick="toggleTripTab('trips')" id="tab-trips" class="px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm transition-all">Reisen</button>
-                        <button onclick="toggleTripTab('alerts')" id="tab-alerts" class="px-6 py-2 rounded-lg text-slate-400 font-bold text-sm transition-all">Preisalarme</button>
-                    </div>
+                <div class="flex bg-slate-800 p-1 rounded-xl border border-slate-700">
+                    <button onclick="toggleTripTab('trips')" id="tab-trips" class="px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm transition-all">Reisen</button>
+                    <button onclick="toggleTripTab('alerts')" id="tab-alerts" class="px-6 py-2 rounded-lg text-slate-400 font-bold text-sm transition-all">Preisalarme</button>
                 </div>
             </div>
             <div id="trips-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
-            <div id="alerts-container" class="hidden">
-                <div id="alerts-scroll-container" class="flex gap-6 overflow-x-auto pb-8 snap-x snap-mandatory no-scrollbar"></div>
-            </div>
+            <div id="alerts-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden"></div>
         </div>
     </div>
 
-    <!-- Modale -->
+    <!-- Flight Search Modal -->
     <div id="add-trip-modal" class="absolute inset-0 z-[60] modal-bg flex items-center justify-center pointer-events-auto hidden opacity-0 transition-opacity duration-300">
         <div class="bg-slate-900 w-full max-w-3xl rounded-[2.5rem] p-10 border border-slate-700 shadow-2xl transform transition-transform translate-y-10 max-h-[92vh] flex flex-col overflow-hidden">
             <div class="flex justify-between items-center mb-8 shrink-0">
-                <div><h2 class="text-3xl font-black text-white">Flugsuche</h2><p class="text-slate-400 text-sm mt-1">Live-Angebote finden</p></div>
-                <button onclick="hideAddTripModal()" class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 transition"><span class="material-symbols-outlined">close</span></button>
+                <div>
+                    <h2 class="text-3xl font-black text-white">Flugsuche</h2>
+                    <p class="text-slate-400 text-sm mt-1">Live-Angebote finden und Trips planen</p>
+                </div>
+                <button onclick="hideAddTripModal()" class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 transition">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
             </div>
+
             <div id="search-inputs" class="space-y-6 shrink-0 overflow-y-auto pr-2 no-scrollbar">
                 <div class="grid grid-cols-2 gap-6">
-                    <input id="input-origin" type="text" placeholder="VON (FRA)" class="search-input uppercase font-bold" maxlength="3">
-                    <input id="input-dest" type="text" placeholder="NACH (TYO)" class="search-input uppercase font-bold" maxlength="3">
+                    <div>
+                        <label for="input-origin" class="text-[10px] text-slate-500 uppercase font-black tracking-widest ml-1 mb-2 block">VON (IATA)</label>
+                        <input id="input-origin" type="text" placeholder="z.B. FRA" class="search-input uppercase font-bold" maxlength="3">
+                    </div>
+                    <div>
+                        <label for="input-dest" class="text-[10px] text-slate-500 uppercase font-black tracking-widest ml-1 mb-2 block">NACH (IATA)</label>
+                        <input id="input-dest" type="text" placeholder="z.B. TYO" class="search-input uppercase font-bold" maxlength="3">
+                    </div>
                 </div>
-                <input id="input-start" type="date" class="search-input">
+                <div>
+                    <label for="input-start" class="text-[10px] text-slate-500 uppercase font-black tracking-widest ml-1 mb-2 block">Datum</label>
+                    <input id="input-start" type="date" class="search-input">
+                </div>
 
                 <div>
                     <label class="text-[10px] text-slate-500 uppercase font-black tracking-widest ml-1 mb-2 block">Passagiere</label>
@@ -151,40 +433,23 @@
                     </div>
                 </div>
 
-                <button class="w-full bg-cyan-500 text-slate-900 font-black py-4 rounded-2xl" onclick="performSearch()">FLÜGE SUCHEN</button>
+                <button id="btn-search-trigger" class="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-black py-4 rounded-2xl shadow-lg transition-all" onclick="performSearch()">
+                    FLÜGE SUCHEN
+                </button>
             </div>
+
             <div id="search-results-area" class="mt-8 flex-1 overflow-y-auto no-scrollbar space-y-4 hidden border-t border-slate-800 pt-8">
                 <div id="results-list" class="space-y-4 pb-4"></div>
             </div>
         </div>
     </div>
 
-    <div id="add-alert-modal" class="absolute inset-0 z-[60] modal-bg flex items-center justify-center pointer-events-auto hidden opacity-0 transition-opacity duration-300">
-        <div class="bg-slate-900 w-full max-w-2xl rounded-[2.5rem] p-10 border border-slate-700 shadow-2xl transform transition-transform translate-y-10">
-            <div class="flex justify-between items-center mb-8">
-                <div><h2 class="text-3xl font-black text-white">Neuer Preisalarm</h2><p class="text-slate-400 text-sm mt-1">Überwache deine Traumroute</p></div>
-                <button onclick="hideAddAlertModal()" class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center"><span class="material-symbols-outlined">close</span></button>
-            </div>
-            <div class="space-y-6">
-                <div class="grid grid-cols-2 gap-6">
-                    <input id="alert-origin" type="text" placeholder="VON (IATA)" class="search-input uppercase font-bold" maxlength="3">
-                    <input id="alert-dest" type="text" placeholder="NACH (IATA)" class="search-input uppercase font-bold" maxlength="3">
-                </div>
-                <div class="grid grid-cols-2 gap-6">
-                    <input id="alert-date" type="date" class="search-input">
-                    <input id="alert-target-price" type="number" placeholder="ZIELPREIS €" class="search-input">
-                </div>
-                <button onclick="createPriceAlert()" class="w-full bg-cyan-500 text-slate-900 font-black py-4 rounded-2xl shadow-lg">ALARM ERSTELLEN</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Sidebar Details -->
+    <!-- Sidebar Detail -->
     <div id="detail-sheet" class="pointer-events-auto">
         <div class="relative h-64 shrink-0">
-            <img id="detail-img" src="" class="w-full h-full object-cover">
+            <img id="detail-img" src="" alt="Reiseziel" class="w-full h-full object-cover">
             <div class="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-slate-900"></div>
-            <button onclick="closeDetail()" class="absolute top-6 right-6 w-12 h-12 bg-black/40 rounded-full flex items-center justify-center text-white"><span class="material-symbols-outlined">close</span></button>
+            <button onclick="closeDetail()" class="absolute top-6 right-6 w-12 h-12 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/10 hover:bg-black/60 transition"><span class="material-symbols-outlined">close</span></button>
             <div class="absolute bottom-6 left-8 right-8">
                 <h2 id="detail-title" class="text-4xl font-black tracking-tight"></h2>
                 <p id="detail-date" class="text-slate-300 text-sm mt-1 uppercase font-bold tracking-widest"></p>
@@ -192,25 +457,44 @@
         </div>
         <div class="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar">
             <div id="detail-itinerary" class="space-y-4"></div>
+            <button class="w-full py-4 bg-white text-slate-900 font-black rounded-2xl shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all">BUCHUNG ABSCHLIESSEN</button>
             <button onclick="deleteCurrentTrip()" class="w-full py-4 text-red-400 text-xs font-black uppercase tracking-widest hover:bg-red-500/10 rounded-2xl transition-all">Reise entfernen</button>
         </div>
     </div>
 
-    <!-- Navigation -->
+    <!-- Navigation Bar -->
     <div class="absolute bottom-10 left-0 right-0 z-40 flex justify-center pointer-events-none">
         <div class="glass rounded-full px-8 py-4 flex items-center gap-10 pointer-events-auto border border-white/10 shadow-2xl">
-            <button onclick="switchView('home')" id="nav-home" class="flex flex-col items-center text-cyan-400"><span class="material-symbols-outlined text-3xl">public</span><span class="text-[8px] font-black uppercase">Home</span></button>
-            <button onclick="showAddTripModal()" class="w-16 h-16 rounded-full bg-gradient-to-r from-cyan-400 to-blue-600 flex items-center justify-center text-white shadow-lg"><span class="material-symbols-outlined text-4xl">add</span></button>
-            <button onclick="switchView('trips')" id="nav-trips" class="flex flex-col items-center text-slate-500"><span class="material-symbols-outlined text-3xl">event_note</span><span class="text-[8px] font-black uppercase">Planung</span></button>
+            <button onclick="switchView('home')" id="nav-home" class="flex flex-col items-center text-cyan-400 transition hover:scale-110"><span class="material-symbols-outlined text-3xl">public</span><span class="text-[8px] font-black uppercase">Home</span></button>
+            <button onclick="showAddTripModal()" class="w-16 h-16 rounded-full bg-gradient-to-r from-cyan-400 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/40 transform hover:scale-110 active:scale-95 transition-all"><span class="material-symbols-outlined text-4xl">add</span></button>
+            <button onclick="switchView('trips')" id="nav-trips" class="flex flex-col items-center text-slate-500 transition hover:scale-110"><span class="material-symbols-outlined text-3xl">event_note</span><span class="text-[8px] font-black uppercase">Planung</span></button>
         </div>
     </div>
 </div>
 
 <script>
-    // --- 1. GLOBE ENGINE MIT STERNEN, MOND (HEIGHT-MAP) & SONNE ---
+    // --- DATABASE & STATE ---
+    const cityDatabase = {
+        "FRA": {lat: 50.03, lon: 8.57}, "LHR": {lat: 51.47, lon: -0.45}, "TYO": {lat: 35.67, lon: 139.65}, "JFK": {lat: 40.64, lon: -73.77},
+        "BER": {lat: 52.36, lon: 13.50}, "CDG": {lat: 49.00, lon: 2.55}, "DXB": {lat: 25.25, lon: 55.36}
+    };
+
+    // Load state from localStorage or default
+    let trips = JSON.parse(localStorage.getItem('tf_trips')) || {};
+    let priceAlerts = JSON.parse(localStorage.getItem('tf_alerts')) || [];
+    let passengerCounts = { adults: 1, children: 0, infants: 0 };
+    let currentDetailKey = null;
+
+    function persistState() {
+        localStorage.setItem('tf_trips', JSON.stringify(trips));
+        localStorage.setItem('tf_alerts', JSON.stringify(priceAlerts));
+    }
+
+    // --- THREE.JS ENGINE ---
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.z = 15;
+
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -220,236 +504,114 @@
     controls.enableDamping = true;
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.5;
+    // Zoom Limits
     controls.minDistance = 7;
-    controls.maxDistance = 100;
-
-    // STERNE
-    const starGeo = new THREE.BufferGeometry();
-    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05, transparent: true, opacity: 0.8 });
-    const starVerts = [];
-    for(let i=0; i<5000; i++) starVerts.push((Math.random()-0.5)*400, (Math.random()-0.5)*400, (Math.random()-0.5)*400);
-    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts, 3));
-    const stars = new THREE.Points(starGeo, starMat);
-    scene.add(stars);
+    controls.maxDistance = 30;
 
     const globeGroup = new THREE.Group(); scene.add(globeGroup);
     const texLoad = new THREE.TextureLoader();
 
-    // Atmosphäre & Erde
+    // Background Stars
+    const starGeo = new THREE.BufferGeometry();
+    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05, transparent: true, opacity: 0.8 });
+    const starVerts = [];
+    for(let i=0; i<5000; i++) starVerts.push((Math.random()-0.5)*150, (Math.random()-0.5)*150, (Math.random()-0.5)*150);
+    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts, 3));
+    const stars = new THREE.Points(starGeo, starMat);
+    scene.add(stars);
+
+    // Atmosphere Glow
     const atmosphere = new THREE.Mesh(
         new THREE.SphereGeometry(5.2, 64, 64),
         new THREE.MeshPhongMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.1, side: THREE.BackSide, blending: THREE.AdditiveBlending })
     );
     scene.add(atmosphere);
 
-    const earth = new THREE.Mesh(
-        new THREE.SphereGeometry(5, 64, 64),
-        new THREE.MeshStandardMaterial({
-            map: texLoad.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg'),
-            emissiveMap: texLoad.load('https://unpkg.com/three-globe/example/img/earth-night.jpg'),
-            emissive: new THREE.Color(0xffffcc), emissiveIntensity: 0.4
-        })
-    );
+    // Earth with Emissive City Lights
+    const earthMaterial = new THREE.MeshStandardMaterial({
+        map: texLoad.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg'),
+        emissiveMap: texLoad.load('https://unpkg.com/three-globe/example/img/earth-night.jpg'),
+        emissive: new THREE.Color(0xffffcc),
+        emissiveIntensity: 0.4,
+        roughness: 0.7, metalness: 0.2
+    });
+    const earth = new THREE.Mesh(new THREE.SphereGeometry(5, 64, 64), earthMaterial);
     globeGroup.add(earth);
 
-    // REALISTISCHER MOND MIT HEIGHT-MAP (DISPLACEMENT)
-    const moonGeometry = new THREE.SphereGeometry(1.25, 128, 128); // Höhere Auflösung für Displacement
-    const moonTexture = texLoad.load('https://unpkg.com/three-globe/example/img/moon.jpg');
-    const moonMaterial = new THREE.MeshStandardMaterial({
-        map: moonTexture,
-        bumpMap: moonTexture,
-        bumpScale: 0.05,
-        displacementMap: moonTexture, // Height Map
-        displacementScale: 0.1,       // Stärke der Verformung
-        roughness: 1.0,
-        metalness: 0.0
-    });
-    const moon = new THREE.Mesh(moonGeometry, moonMaterial);
-    moon.rotation.x = Math.PI / 8;
-    scene.add(moon);
-
-    // SICHTBARE SONNE
-    const sunGeometry = new THREE.SphereGeometry(4, 64, 64);
-    const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xfff9e6 });
-    const sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
-    sunMesh.position.set(150, 80, 150);
-    scene.add(sunMesh);
-
-    // SONNEN-LICHT
-    scene.add(new THREE.AmbientLight(0x333333));
-    const sunLight = new THREE.DirectionalLight(0xffffff, 1.8);
-    sunLight.position.copy(sunMesh.position);
+    // Lighting (Sun)
+    scene.add(new THREE.AmbientLight(0x111111));
+    const sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
+    sunLight.position.set(50, 20, 30);
     scene.add(sunLight);
+
+    // --- REALISTIC SUN MESH ---
+    const sunGroup = new THREE.Group();
+    sunGroup.position.copy(sunLight.position);
+    scene.add(sunGroup);
+
+    // 1. Sun Core
+    const sunGeo = new THREE.SphereGeometry(3, 32, 32);
+    const sunMat = new THREE.MeshBasicMaterial({ color: 0xffddaa });
+    const sunMesh = new THREE.Mesh(sunGeo, sunMat);
+    sunGroup.add(sunMesh);
+
+    // 2. Sun Glow (Sprite)
+    const textureLoader = new THREE.TextureLoader();
+    const spriteMaterial = new THREE.SpriteMaterial({
+        map: textureLoader.load('https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/sprites/glow.png'),
+        color: 0xffaa00,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        opacity: 0.8
+    });
+    const sunSprite = new THREE.Sprite(spriteMaterial);
+    sunSprite.scale.set(35, 35, 1.0);
+    sunGroup.add(sunSprite);
+
+
+    // --- REALISTIC MOON ---
+    const moonGroup = new THREE.Group(); // Pivot for rotation around earth
+    scene.add(moonGroup);
+
+    const moonGeo = new THREE.SphereGeometry(1.35, 32, 32); // Moon is ~1/4 size of Earth (5 radius -> 1.35)
+    const moonMat = new THREE.MeshStandardMaterial({
+        map: textureLoader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg'),
+        roughness: 0.8,
+        metalness: 0.1
+    });
+    const moon = new THREE.Mesh(moonGeo, moonMat);
+    moon.position.set(20, 0, 0); // Distance from Earth
+    moonGroup.add(moon);
 
     const markerGroup = new THREE.Group(); globeGroup.add(markerGroup);
 
-    // Hilfsfunktionen
     function latLonToPos(lat, lon, r) {
-        const phi = (90 - lat) * (Math.PI / 180), theta = (lon + 180) * (Math.PI / 180);
+        const phi = (90 - lat) * (Math.PI / 180);
+        const theta = (lon + 180) * (Math.PI / 180);
         return new THREE.Vector3(-(r * Math.sin(phi) * Math.cos(theta)), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta));
     }
 
+    // --- NEU: Bogen-Funktion ---
     function drawFlightPath(originCode, destCode) {
-        const origin = cityDatabase[originCode], dest = cityDatabase[destCode];
+        const origin = cityDatabase[originCode];
+        const dest = cityDatabase[destCode];
         if (!origin || !dest) return;
-        const start = latLonToPos(origin.lat, origin.lon, 5.05), end = latLonToPos(dest.lat, dest.lon, 5.05);
+
+        const start = latLonToPos(origin.lat, origin.lon, 5.05);
+        const end = latLonToPos(dest.lat, dest.lon, 5.05);
+
+        // Mittelpunkt berechnen und nach außen wölben für den Bogen
         const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-        mid.setLength(5.05 + start.distanceTo(end) * 0.4);
+        const distance = start.distanceTo(end);
+        mid.setLength(5.05 + distance * 0.4); // Die Höhe des Bogens hängt von der Distanz ab
+
         const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
-        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(50)), new THREE.LineBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.6 }));
+        const points = curve.getPoints(50);
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const material = new THREE.LineBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.6, linewidth: 2 });
+
+        const line = new THREE.Line(geometry, material);
         markerGroup.add(line);
-    }
-
-    // --- 2. DATEN & STATUS ---
-    const cityDatabase = { "FRA": {lat: 50.03, lon: 8.57}, "LHR": {lat: 51.47, lon: -0.45}, "TYO": {lat: 35.67, lon: 139.65}, "JFK": {lat: 40.64, lon: -73.77}, "BER": {lat: 52.36, lon: 13.50}, "DXB": {lat: 25.25, lon: 55.36}, "CDG": {lat: 49.00, lon: 2.55} };
-    let trips = {}, priceAlerts = [], currentDetailKey = null;
-    let passengerCounts = { adults: 1, children: 0, infants: 0 };
-
-    // --- 3. UI LOGIK ---
-
-    function switchView(v) {
-        ['home','trips'].forEach(id => {
-            const el = document.getElementById('view-'+id);
-            if(id===v) {
-                el.classList.remove('hidden');
-                setTimeout(()=>el.classList.remove('opacity-0'),10);
-                if(v==='trips') renderPlanning();
-            }
-            else {
-                el.classList.add('opacity-0');
-                setTimeout(()=>el.classList.add('hidden'),300);
-            }
-        });
-        document.getElementById('nav-home').className = v === 'home' ? 'flex flex-col items-center text-cyan-400' : 'flex flex-col items-center text-slate-500';
-        document.getElementById('nav-trips').className = v === 'trips' ? 'flex flex-col items-center text-cyan-400' : 'flex flex-col items-center text-slate-500';
-        controls.autoRotate = (v==='home');
-    }
-
-    function toggleTripTab(tab) {
-        const isAlerts = (tab === 'alerts');
-        document.getElementById('tab-trips').className = !isAlerts ? 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm transition-all' : 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm transition-all';
-        document.getElementById('tab-alerts').className = isAlerts ? 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm transition-all' : 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm transition-all';
-        document.getElementById('trips-container').classList.toggle('hidden', isAlerts);
-        document.getElementById('alerts-container').classList.toggle('hidden', !isAlerts);
-        document.getElementById('add-alert-btn').classList.toggle('hidden', !isAlerts);
-        if(isAlerts) renderAlerts();
-    }
-
-    // --- 4. PREISALARM LOGIK ---
-
-    function createPriceAlert() {
-        const origin = document.getElementById('alert-origin').value.toUpperCase();
-        const dest = document.getElementById('alert-dest').value.toUpperCase();
-        const target = document.getElementById('alert-target-price').value;
-
-        if(!origin || !dest || !target) return showToast("Bitte alle Felder ausfüllen!");
-
-        const newAlert = {
-            id: Date.now(),
-            origin, dest,
-            targetPrice: target,
-            currentPrice: Math.floor(target * (1 + Math.random() * 0.3)),
-            history: Array.from({length: 10}, () => Math.floor(target * (1 + Math.random() * 0.5)))
-        };
-
-        priceAlerts.push(newAlert);
-        hideAddAlertModal();
-        renderAlerts();
-        showToast(`Preisalarm für ${dest} erstellt!`);
-    }
-
-    function renderAlerts() {
-        const container = document.getElementById('alerts-scroll-container');
-        container.innerHTML = priceAlerts.length ? '' : '<p class="text-slate-500 w-full text-center py-20 font-bold uppercase tracking-widest text-xs">Keine Alarme aktiv.</p>';
-
-        priceAlerts.forEach(alert => {
-            const card = document.createElement('div');
-            card.className = 'alert-card-slide snap-start';
-            card.innerHTML = `
-                <div class="alert-card">
-                    <div class="flex justify-between items-start mb-2">
-                        <div>
-                            <h3 class="text-xl font-black">${alert.origin} → ${alert.dest}</h3>
-                            <p class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Ziel: ${alert.targetPrice}€</p>
-                        </div>
-                        <button onclick="deleteAlert(${alert.id})" class="text-red-500 hover:scale-110 transition p-1"><span class="material-symbols-outlined">delete</span></button>
-                    </div>
-                    <div class="flex-1 price-chart-container">
-                        <canvas id="chart-${alert.id}"></canvas>
-                    </div>
-                    <div class="mt-4 pt-4 border-t border-white/5 flex justify-between items-center">
-                        <span class="text-xs text-slate-400">Aktuell: <b class="text-white text-lg ml-1">${alert.currentPrice}€</b></span>
-                        <div class="px-3 py-1 ${alert.currentPrice <= alert.targetPrice ? 'bg-green-500/20 text-green-400' : 'bg-orange-500/20 text-orange-400'} text-[10px] font-bold rounded-full uppercase">
-                            ${alert.currentPrice <= alert.targetPrice ? 'Guter Preis' : 'Warten'}
-                        </div>
-                    </div>
-                </div>
-            `;
-            container.appendChild(card);
-            initAlertChart(alert);
-        });
-    }
-
-    function initAlertChart(alert) {
-        const ctx = document.getElementById(`chart-${alert.id}`).getContext('2d');
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: Array.from({length: alert.history.length}, (_, i) => i),
-                datasets: [{
-                    data: alert.history,
-                    borderColor: '#22d3ee',
-                    borderWidth: 2,
-                    tension: 0.4,
-                    pointRadius: 0,
-                    fill: true,
-                    backgroundColor: 'rgba(34, 211, 238, 0.05)'
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: { x: { display: false }, y: { display: false } }
-            }
-        });
-    }
-
-    // --- 5. SYSTEM HELPERS ---
-
-    function updateCounter(type, delta) {
-        passengerCounts[type] = Math.max(type === 'adults' ? 1 : 0, passengerCounts[type] + delta);
-        document.getElementById(`count-${type}`).innerText = passengerCounts[type];
-    }
-
-    function performSearch() {
-        const dest = document.getElementById('input-dest').value.toUpperCase();
-        const origin = document.getElementById('input-origin').value.toUpperCase();
-        if(!dest || !origin) return;
-
-        document.getElementById('search-results-area').classList.remove('hidden');
-        document.getElementById('results-list').innerHTML = `
-            <div class="flight-result-card">
-                <div><p class="font-bold">Direktflug</p><p class="text-[10px] text-slate-500">Economy • 11h 20m</p></div>
-                <div class="text-right">
-                    <p class="text-xl font-black">420€</p>
-                    <button onclick="saveTrip('${dest}', 'Airline', '420€', '${origin}')" class="bg-cyan-500 text-slate-900 px-3 py-1 rounded-lg text-[10px] font-bold mt-1">PLANEN</button>
-                </div>
-            </div>
-        `;
-        drawFlightPath(origin, dest);
-    }
-
-    function saveTrip(dest, airline, price, origin) {
-        const id = 't_' + Date.now();
-        const coords = cityDatabase[dest] || {lat: 48, lon: 11};
-        trips[id] = {
-            title: dest, date: 'MAI 2025', lat: coords.lat, lon: coords.lon,
-            img: `https://loremflickr.com/400/300/city,${dest}`,
-            itinerary: [{title: 'Hinflug', desc: airline + ' - ' + price}, {title: 'Passagiere', desc: `${passengerCounts.adults} Erw., ${passengerCounts.children} Kind, ${passengerCounts.infants} Baby`}]
-        };
-        renderMarkers();
-        hideAddTripModal();
-        showToast(`Trip nach ${dest} gespeichert!`);
     }
 
     function renderMarkers() {
@@ -458,74 +620,638 @@
             const t = trips[key];
             const m = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), new THREE.MeshBasicMaterial({ color: 0x22d3ee }));
             m.position.copy(latLonToPos(t.lat, t.lon, 5.05));
+            m.userData = { key };
             markerGroup.add(m);
         });
         document.getElementById('stat-count').innerText = Object.keys(trips).length;
-    }
-
-    function renderPlanning() {
-        const c = document.getElementById('trips-container'); c.innerHTML = '';
-        Object.keys(trips).forEach(k => {
-            const t = trips[k];
-            c.innerHTML += `
-                <div class="glass-card rounded-3xl overflow-hidden cursor-pointer" onclick="openDetail('${k}')">
-                    <img src="${t.img}" class="h-40 w-full object-cover">
-                    <div class="p-6"><h3 class="font-black text-xl">${t.title}</h3><p class="text-xs text-slate-400 uppercase font-bold tracking-widest">${t.date}</p></div>
-                </div>
-            `;
-        });
-    }
-
-    function openDetail(k) {
-        const t = trips[k]; currentDetailKey = k;
-        document.getElementById('detail-img').src = t.img;
-        document.getElementById('detail-title').innerText = t.title;
-        document.getElementById('detail-date').innerText = t.date;
-        const tl = document.getElementById('detail-itinerary'); tl.innerHTML = '';
-        t.itinerary.forEach(i => tl.innerHTML += `<div class="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50"><p class="font-bold text-white text-sm">${i.title}</p><p class="text-[10px] text-slate-400 mt-1 uppercase font-bold">${i.desc}</p></div>`);
-        document.getElementById('detail-sheet').classList.add('open');
-    }
-
-    function showToast(msg) {
-        const t = document.createElement('div'); t.className = 'toast'; t.innerText = msg;
-        document.body.appendChild(t);
-        setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2500);
     }
 
     function animate(t) {
         requestAnimationFrame(animate);
         TWEEN.update();
         controls.update();
-
-        // STERNE ROTATION
         stars.rotation.y -= 0.0001;
 
-        // MOND ORBIT
-        const moonOrbitSpeed = t * 0.0002;
-        const moonDistance = 22;
-        moon.position.x = Math.cos(moonOrbitSpeed) * moonDistance;
-        moon.position.z = Math.sin(moonOrbitSpeed) * moonDistance;
-        moon.rotation.y += 0.0015;
+        // Moon Orbit
+        if (typeof moonGroup !== 'undefined') {
+            moonGroup.rotation.y += 0.0015;
+            moonGroup.rotation.x = Math.sin(t * 0.0001) * 0.2; // slight tilt oscillation
+        }
 
+        // Sun "breathing" glow
+        if (typeof sunSprite !== 'undefined') {
+            const scale = 35 + Math.sin(t * 0.002) * 2;
+            sunSprite.scale.set(scale, scale, 1.0);
+        }
+
+        earthMaterial.emissiveIntensity = 0.3 + Math.sin(t * 0.001) * 0.1;
         renderer.render(scene, camera);
     }
-
-    // Modal Funktionen
-    function showAddTripModal() { document.getElementById('add-trip-modal').classList.remove('hidden'); setTimeout(()=>document.getElementById('add-trip-modal').classList.remove('opacity-0'),10); }
-    function hideAddTripModal() { document.getElementById('add-trip-modal').classList.add('opacity-0'); setTimeout(()=>document.getElementById('add-trip-modal').classList.add('hidden'),300); }
-    function showAddAlertModal() { document.getElementById('add-alert-modal').classList.remove('hidden'); setTimeout(()=>document.getElementById('add-alert-modal').classList.remove('opacity-0'),10); }
-    function hideAddAlertModal() { document.getElementById('add-alert-modal').classList.add('opacity-0'); setTimeout(()=>document.getElementById('add-alert-modal').classList.add('hidden'),300); }
-    function closeDetail() { document.getElementById('detail-sheet').classList.remove('open'); }
-    function toggleNotifications() { document.getElementById('notification-dropdown').classList.toggle('hidden'); }
-    function deleteAlert(id) { priceAlerts = priceAlerts.filter(a => a.id !== id); renderAlerts(); showToast("Alarm gelöscht"); }
-    function deleteCurrentTrip() { if(currentDetailKey) { delete trips[currentDetailKey]; renderMarkers(); renderPlanning(); closeDetail(); } }
-
-    window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    });
     animate();
+
+    // --- UI HELPERS ---
+
+    function updateCounter(type, delta) {
+        passengerCounts[type] = Math.max(type === 'adults' ? 1 : 0, passengerCounts[type] + delta);
+        document.getElementById(`count-${type}`).innerText = passengerCounts[type];
+    }
+
+    async function performSearch() {
+        const origin = document.getElementById('input-origin').value.trim().toUpperCase();
+        const dest = document.getElementById('input-dest').value.trim().toUpperCase();
+        const date = document.getElementById('input-start').value;
+        const btn = document.getElementById('btn-search-trigger');
+
+        if(!origin || !dest || !date) return;
+
+        btn.disabled = true;
+        btn.innerHTML = `<div class="flex items-center justify-center gap-2"><div class="loading-ring"></div> SUCHE...</div>`;
+
+        try {
+            const res = await fetch('/api/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ origin, destination: dest, date, passengers: passengerCounts })
+            });
+            const data = await res.json();
+
+            // Marker leeren vor neuer Suche, um Route zu visualisieren
+            while(markerGroup.children.length > 0) markerGroup.remove(markerGroup.children[0]);
+
+            if(data.success && data.flights.length > 0) {
+                renderResults(data.flights, dest, origin);
+                drawFlightPath(origin, dest); // Bogen zeichnen
+                flyTo(cityDatabase[dest]?.lat || 0, cityDatabase[dest]?.lon || 0);
+            } else {
+                mockSearch(dest, origin);
+            }
+        } catch(e) { mockSearch(dest, origin); }
+        finally { btn.disabled = false; btn.innerText = "FLÜGE SUCHEN"; }
+    }
+
+    function mockSearch(cityName, originName) {
+        const dummyData = [
+            { airline: 'Lufthansa', price: '420€', departure: '10:30', duration: '11h 20m' },
+            { airline: 'Emirates', price: '389€', departure: '21:15', duration: '13h 05m' }
+        ];
+        renderResults(dummyData, cityName, originName);
+        drawFlightPath(originName, cityName);
+    }
+
+    // --- Preis-/Alert-Helpers ---
+    function parsePriceToNumber(priceText) {
+        if (!priceText) return null;
+        // Accept formats like "420€", "€420", "1.299€", "1,299.50 €"
+        const cleaned = String(priceText)
+            .replace(/\s/g, '')
+            .replace(/€/g, '')
+            .replace(/EUR/ig, '')
+            .replace(/\.(?=\d{3}(\D|$))/g, '') // remove thousand separators like 1.299
+            .replace(/,(?=\d{2}(\D|$))/g, '.'); // convert decimal comma to dot
+
+        const num = Number(cleaned.replace(/[^0-9.]/g, ''));
+        return Number.isFinite(num) ? num : null;
+    }
+
+    function formatEuro(n) {
+        if (typeof n !== 'number' || !Number.isFinite(n)) return '';
+        try {
+            return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+        } catch {
+            return `${Math.round(n)}€`;
+        }
+    }
+
+    function notifyPriceHit(alert, currentPriceNumber, contextText) {
+        // de-dup: only notify once per alert until it goes above target again
+        if (alert?.notifiedAt && alert?.lastSeenPrice != null && alert.lastSeenPrice <= alert.targetPrice) {
+            return;
+        }
+
+        alert.notifiedAt = Date.now();
+        alert.lastSeenPrice = currentPriceNumber;
+
+        // UI signals
+        document.getElementById('notif-badge').classList.remove('hidden');
+        showToast(`Preisalarm: ${alert.dest} jetzt ${formatEuro(currentPriceNumber)}!`);
+
+        // Push to notification feed
+        const notif = {
+            id: Date.now() + Math.random(),
+            type: 'price_hit',
+            title: 'Preisalarm erreicht',
+            message: `${alert.dest}: ${formatEuro(currentPriceNumber)} ≤ ${formatEuro(alert.targetPrice)}${contextText ? ' • ' + contextText : ''}`,
+            ts: Date.now()
+        };
+
+        window.__tfNotifs = window.__tfNotifs || [];
+        window.__tfNotifs.unshift(notif);
+        renderNotifications();
+    }
+
+    function renderNotifications() {
+        const container = document.getElementById('notif-content');
+        if (!container) return;
+        const notifs = window.__tfNotifs || [];
+
+        if (!notifs.length) {
+            container.innerHTML = '<div class="p-4 text-slate-400 text-sm">Keine neuen Benachrichtigungen</div>';
+            return;
+        }
+
+        container.innerHTML = '';
+        notifs.slice(0, 15).forEach(n => {
+            const date = new Date(n.ts);
+            const time = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+            container.innerHTML += `
+                <div class="p-4 hover:bg-slate-700/50 rounded-xl cursor-pointer transition">
+                    <span class="text-cyan-400 text-[10px] font-bold uppercase tracking-widest">${n.title} • ${time}</span>
+                    <p class="text-sm mt-1 text-slate-200">${n.message}</p>
+                </div>
+            `;
+        });
+    }
+
+    function renderResults(flights, cityName, originName) {
+        const area = document.getElementById('search-results-area');
+        const list = document.getElementById('results-list');
+        area.classList.remove('hidden');
+        area.classList.add('enter-pop');
+        list.innerHTML = '';
+
+        flights.forEach((f, idx) => {
+            const priceNum = parsePriceToNumber(f.price);
+            const priceDisplay = f.price ?? '';
+
+            list.innerHTML += `
+                <div class="flight-result-card enter-pop" style="animation-delay:${Math.min(idx * 40, 240)}ms">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center font-black text-cyan-400 border border-slate-700">${f.airline.substring(0,2)}</div>
+                        <div>
+                            <p class="font-bold text-white text-sm">${f.airline}</p>
+                            <p class="text-[9px] text-slate-500 uppercase">${f.departure} • ${f.duration}</p>
+                        </div>
+                    </div>
+                    <div class="text-right flex items-center gap-4">
+                        <div class="min-w-[92px]">
+                            <p class="text-lg font-black text-white">${priceDisplay}</p>
+                            <p class="text-[9px] text-slate-400 uppercase tracking-widest font-bold">aktueller Preis</p>
+                        </div>
+                        <div class="flex flex-col gap-2">
+                            <button data-ripple="true" onclick="saveTrip('${cityName}', '${f.airline}', '${priceDisplay}', '${originName}')" class="px-3 py-1 bg-cyan-500 text-slate-900 rounded-lg font-black text-[9px] uppercase">Planen</button>
+
+                            <div class="flex items-center gap-2 justify-end">
+                                <input id="alert-${cityName}-${idx}" inputmode="numeric" placeholder="Zielpreis" class="search-input" style="padding:0.45rem 0.6rem;border-radius:0.9rem;width:110px;font-size:0.75rem" />
+                                <button data-ripple="true" onclick="addAlertFromResult('${cityName}', '${priceDisplay}', 'alert-${cityName}-${idx}')" class="px-3 py-1 border border-slate-700 rounded-lg font-black text-[9px] uppercase">Alarm</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Check existing alerts for this destination against this flight price
+            if (typeof priceNum === 'number') {
+                checkAlertsForDestination(cityName, priceNum, `${f.airline} • ${f.departure}`);
+            }
+        });
+
+        // Ripple for dynamically created buttons
+        list.querySelectorAll('[data-ripple="true"]').forEach(attachRipple);
+        showToast('Ergebnisse aktualisiert');
+
+        // Remove the class so future opens can animate again
+        setTimeout(() => area.classList.remove('enter-pop'), 700);
+    }
+
+    function addAlertFromResult(dest, currentPriceText, inputId) {
+        const input = document.getElementById(inputId);
+        const raw = input ? input.value : '';
+        const target = parsePriceToNumber(raw);
+        const current = parsePriceToNumber(currentPriceText);
+
+        if (target == null || target <= 0) {
+            showToast('Bitte einen gültigen Zielpreis eingeben');
+            if (input) input.focus();
+            return;
+        }
+
+        addAlert(dest, target, current);
+        if (input) input.value = '';
+    }
+
+    function addAlert(dest, targetPriceNumber, currentPriceNumber) {
+        // Prevent duplicates for same destination + target
+        const exists = priceAlerts.some(a => a.dest === dest && a.targetPrice === targetPriceNumber);
+        if (exists) {
+            showToast('Preisalarm existiert schon');
+            return;
+        }
+
+        priceAlerts.push({
+            id: Date.now(),
+            dest,
+            targetPrice: targetPriceNumber,
+            createdAt: Date.now(),
+            lastSeenPrice: typeof currentPriceNumber === 'number' ? currentPriceNumber : null,
+            notifiedAt: null
+        });
+
+        persistState(); // Save
+
+        document.getElementById('notif-badge').classList.remove('hidden');
+        showToast(`Preisalarm gesetzt: ${dest} ≤ ${formatEuro(targetPriceNumber)}`);
+        renderAlerts();
+
+        // immediate hit check (if we know the current price)
+        if (typeof currentPriceNumber === 'number' && currentPriceNumber <= targetPriceNumber) {
+            const alert = priceAlerts.find(a => a.dest === dest && a.targetPrice === targetPriceNumber);
+            if (alert) notifyPriceHit(alert, currentPriceNumber, 'Sofort-Treffer');
+        }
+    }
+
+    function deleteAlert(alertId) {
+        priceAlerts = priceAlerts.filter(a => a.id !== alertId);
+        persistState(); // Save
+        renderAlerts();
+        showToast('Preisalarm entfernt');
+    }
+
+    function checkAlertsForDestination(dest, currentPriceNumber, contextText) {
+        if (!priceAlerts?.length) return;
+        let changed = false;
+        priceAlerts
+            .filter(a => a.dest === dest)
+            .forEach(a => {
+                a.lastSeenPrice = currentPriceNumber;
+                // reset notified state if price went above target again (so future drops can notify)
+                if (a.notifiedAt && currentPriceNumber > a.targetPrice) {
+                    a.notifiedAt = null;
+                }
+                if (currentPriceNumber <= a.targetPrice) {
+                    notifyPriceHit(a, currentPriceNumber, contextText);
+                }
+                changed = true; // prices updated
+            });
+
+        if (changed) persistState();
+    }
+
+    function renderAlerts() {
+        const c = document.getElementById('alerts-container');
+        if (!c) return;
+
+        c.innerHTML = priceAlerts.length
+            ? ''
+            : '<p class="text-center col-span-full py-20 text-slate-500 font-bold uppercase text-xs tracking-widest">Keine Preisalarme gesetzt</p>';
+
+        priceAlerts
+            .slice()
+            .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+            .forEach(a => {
+                const last = typeof a.lastSeenPrice === 'number' ? formatEuro(a.lastSeenPrice) : '—';
+                const target = formatEuro(a.targetPrice);
+                const status = (typeof a.lastSeenPrice === 'number')
+                    ? (a.lastSeenPrice <= a.targetPrice ? 'Treffer' : 'Warten')
+                    : 'Aktiv';
+
+                c.innerHTML += `
+                    <div class="glass-card rounded-3xl p-7 flex flex-col gap-4">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 bg-cyan-500/15 text-cyan-300 rounded-full flex items-center justify-center border border-cyan-400/20">
+                                    <span class="material-symbols-outlined">notifications_active</span>
+                                </div>
+                                <div>
+                                    <h3 class="font-black text-2xl text-white">${a.dest}</h3>
+                                    <p class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Zielpreis ≤ ${target}</p>
+                                </div>
+                            </div>
+                            <button data-ripple="true" onclick="deleteAlert(${a.id})" class="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition">
+                                <span class="material-symbols-outlined text-slate-200" style="font-size:20px">delete</span>
+                            </button>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-3">
+                            <div class="bg-slate-900/30 border border-white/10 rounded-2xl p-4">
+                                <p class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Letzter Preis</p>
+                                <p class="text-lg font-black text-white mt-1">${last}</p>
+                            </div>
+                            <div class="bg-slate-900/30 border border-white/10 rounded-2xl p-4">
+                                <p class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Ziel</p>
+                                <p class="text-lg font-black text-white mt-1">${target}</p>
+                            </div>
+                            <div class="bg-slate-900/30 border border-white/10 rounded-2xl p-4">
+                                <p class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Status</p>
+                                <p class="text-lg font-black ${status==='Treffer' ? 'text-cyan-300' : 'text-slate-200'} mt-1">${status}</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between">
+                            <p class="text-[10px] text-slate-500 uppercase font-black tracking-widest">Wir benachrichtigen dich, sobald der Preis erreicht ist.</p>
+                            <button data-ripple="true" onclick="showToast('Tipp: Suche erneut, um Preise zu aktualisieren')" class="px-3 py-1 rounded-lg border border-slate-700 font-black text-[9px] uppercase">Info</button>
+                        </div>
+                    </div>
+                `;
+            });
+
+        c.querySelectorAll('[data-ripple="true"]').forEach(attachRipple);
+    }
+
+    // --- Views / Navigation (Home <-> Planung) ---
+    function switchView(view) {
+        const home = document.getElementById('view-home');
+        const tripsView = document.getElementById('view-trips');
+
+        const navHome = document.getElementById('nav-home');
+        const navTrips = document.getElementById('nav-trips');
+
+        if (!home || !tripsView || !navHome || !navTrips) return;
+
+        const show = (el) => {
+            el.classList.remove('hidden');
+            // ensure transitions can run
+            setTimeout(() => el.classList.remove('opacity-0'), 10);
+        };
+        const hide = (el) => {
+            el.classList.add('opacity-0');
+            setTimeout(() => el.classList.add('hidden'), 300);
+        };
+
+        if (view === 'trips') {
+            hide(home);
+            show(tripsView);
+            navHome.className = 'flex flex-col items-center text-slate-500 transition hover:scale-110';
+            navTrips.className = 'flex flex-col items-center text-cyan-400 transition hover:scale-110';
+
+            // default tab
+            toggleTripTab('trips');
+            renderPlanning();
+            controls.autoRotate = false;
+        } else {
+            hide(tripsView);
+            show(home);
+            navHome.className = 'flex flex-col items-center text-cyan-400 transition hover:scale-110';
+            navTrips.className = 'flex flex-col items-center text-slate-500 transition hover:scale-110';
+            controls.autoRotate = true;
+        }
+    }
+
+    function toggleTripTab(tab) {
+        const tabTrips = document.getElementById('tab-trips');
+        const tabAlerts = document.getElementById('tab-alerts');
+        const tripsContainer = document.getElementById('trips-container');
+        const alertsContainer = document.getElementById('alerts-container');
+
+        if (!tabTrips || !tabAlerts || !tripsContainer || !alertsContainer) return;
+
+        const activeClass = 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm transition-all';
+        const inactiveClass = 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm transition-all';
+
+        tabTrips.className = (tab === 'trips') ? activeClass : inactiveClass;
+        tabAlerts.className = (tab === 'alerts') ? activeClass : inactiveClass;
+
+        tripsContainer.classList.toggle('hidden', tab !== 'trips');
+        alertsContainer.classList.toggle('hidden', tab !== 'alerts');
+
+        if (tab === 'alerts') {
+            renderAlerts();
+        } else {
+            renderPlanning();
+        }
+    }
+
+    function renderPlanning() {
+        const c = document.getElementById('trips-container');
+        if (!c) return;
+
+        const keys = Object.keys(trips);
+        if (!keys.length) {
+            c.innerHTML = '<div class="col-span-full text-center py-20 text-slate-500 font-bold uppercase text-xs tracking-widest">Noch keine Reisen geplant</div>';
+            return;
+        }
+
+        c.innerHTML = '';
+        keys.forEach((k, idx) => {
+            const t = trips[k];
+            c.innerHTML += `
+                <div class="glass-card rounded-3xl overflow-hidden cursor-pointer enter-pop" style="animation-delay:${Math.min(idx*40, 240)}ms" onclick="openDetail('${k}'); flyTo(${t.lat}, ${t.lon})">
+                    <img src="${t.img}" alt="${t.title}" class="h-40 w-full object-cover">
+                    <div class="p-6">
+                        <h3 class="font-black text-xl text-white">${t.title}</h3>
+                        <p class="text-xs text-slate-400 uppercase font-bold tracking-widest">${t.date || ''}</p>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    // --- Detail sheet for planned trips ---
+    function openDetail(k) {
+        const t = trips[k];
+        if (!t) return;
+        currentDetailKey = k;
+
+        const img = document.getElementById('detail-img');
+        const title = document.getElementById('detail-title');
+        const date = document.getElementById('detail-date');
+        const it = document.getElementById('detail-itinerary');
+        const sheet = document.getElementById('detail-sheet');
+
+        if (img) img.src = t.img || '';
+        if (title) title.innerText = t.title || '';
+        if (date) date.innerText = t.date || '';
+
+        if (it) {
+            it.innerHTML = '';
+            (t.itinerary || []).forEach((i, idx) => {
+                it.innerHTML += `<div class="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 enter-pop" style="animation-delay:${Math.min(idx*40, 200)}ms"><p class="font-bold text-white text-sm">${i.title}</p><p class="text-[10px] text-slate-400 mt-1 uppercase font-bold">${i.desc}</p></div>`;
+            });
+        }
+
+        if (sheet) sheet.classList.add('open');
+        showToast('Detail geöffnet');
+    }
+
+    function closeDetail() {
+        const sheet = document.getElementById('detail-sheet');
+        if (sheet) sheet.classList.remove('open');
+    }
+
+    function deleteCurrentTrip() {
+        if (!currentDetailKey) return;
+        delete trips[currentDetailKey];
+        currentDetailKey = null;
+
+        persistState(); // Save
+
+        renderMarkers();
+        renderPlanning();
+        closeDetail();
+        showToast('Reise entfernt');
+    }
+
+    // --- Modal helpers (Flugsuche) ---
+    function showAddTripModal() {
+        const modal = document.getElementById('add-trip-modal');
+        if (!modal) return;
+
+        const card = modal.querySelector('div.bg-slate-900');
+        modal.classList.remove('hidden');
+        // ensure opacity transition starts
+        setTimeout(() => modal.classList.remove('opacity-0'), 10);
+
+        // pop-in animation on the card
+        if (card) {
+            card.classList.add('enter-pop');
+            setTimeout(() => card.classList.remove('enter-pop'), 700);
+        }
+
+        // close notifications if open (less overlap)
+        const notif = document.getElementById('notification-dropdown');
+        if (notif && !notif.classList.contains('hidden')) notif.classList.add('hidden');
+    }
+
+    function hideAddTripModal() {
+        const modal = document.getElementById('add-trip-modal');
+        if (!modal) return;
+        modal.classList.add('opacity-0');
+        setTimeout(() => modal.classList.add('hidden'), 300);
+    }
+
+    // --- Microinteractions (Material-ish ripple + toast) ---
+    function attachRipple(el) {
+        if (!el) return;
+        el.addEventListener('click', (e) => {
+            // Skip if disabled
+            if (el.disabled) return;
+            const rect = el.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height);
+            const x = e.clientX - rect.left - size / 2;
+            const y = e.clientY - rect.top - size / 2;
+
+            const ripple = document.createElement('span');
+            ripple.className = 'ripple';
+            ripple.style.width = ripple.style.height = size + 'px';
+            ripple.style.left = x + 'px';
+            ripple.style.top = y + 'px';
+
+            el.appendChild(ripple);
+            ripple.addEventListener('animationend', () => ripple.remove());
+        }, { passive: true });
+    }
+
+    let toastTimer = null;
+    function showToast(message) {
+        const toast = document.getElementById('toast');
+        const text = document.getElementById('toast-text');
+        if (!toast || !text) return;
+        text.textContent = message;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+    }
+
+    function flyTo(lat, lon) {
+        // Smooth camera move towards the given lat/lon on the globe
+        try {
+            controls.autoRotate = false;
+            const targetPos = latLonToPos(lat, lon, camera.position.length());
+            new TWEEN.Tween(camera.position)
+                .to({ x: targetPos.x, y: targetPos.y, z: targetPos.z }, 1500)
+                .easing(TWEEN.Easing.Cubic.InOut)
+                .onUpdate(() => camera.lookAt(0, 0, 0))
+                .start();
+        } catch (e) {
+            console.warn('flyTo failed:', e);
+        }
+    }
+
+    function saveTrip(dest, airline, priceText, origin) {
+        const id = 't_' + Date.now();
+
+        // coords: prefer cityDatabase entry, otherwise random-ish fallback
+        const coords = cityDatabase[dest] || { lat: 48 + Math.random() * 5, lon: 10 + Math.random() * 5 };
+
+        trips[id] = {
+            title: dest,
+            origin: origin || '',
+            date: (new Date()).toLocaleDateString('de-DE', { month: 'short', year: 'numeric' }).toUpperCase(),
+            lat: coords.lat,
+            lon: coords.lon,
+            img: `https://loremflickr.com/800/600/city,${dest}?lock=${Math.floor(Math.random() * 100)}`,
+            itinerary: [
+                { title: 'Hinflug', desc: `${airline} • ${priceText}` },
+                { title: 'Planung', desc: 'Hotel-Recherche aktiv' }
+            ]
+        };
+
+        persistState(); // Save
+
+        renderMarkers();
+        renderPlanning();
+
+        // optional: visualize route if codes known
+        if (origin && dest) {
+            try { drawFlightPath(origin, dest); } catch (_) {}
+        }
+
+        hideAddTripModal();
+        flyTo(coords.lat, coords.lon);
+        showToast('Trip gespeichert');
+    }
+
+    // Attach ripples to key buttons AND init data
+    document.addEventListener('DOMContentLoaded', () => {
+        attachRipple(document.getElementById('btn-search-trigger'));
+        attachRipple(document.getElementById('nav-home'));
+        attachRipple(document.getElementById('nav-trips'));
+
+        // Init visual state from loaded data
+        renderMarkers();
+        renderPlanning();
+        renderAlerts();
+    });
+
+    // --- Marker picking (Click on globe markers opens the right trip) ---
+    const raycaster = new THREE.Raycaster();
+    const mouseNdc = new THREE.Vector2();
+
+    function isClickOnUI(target) {
+        if (!target) return false;
+        // If the click is on an element that is interactive, don't pick the globe
+        return !!target.closest('.interactive, button, input, textarea, select, a, #notification-dropdown, #add-trip-modal, #detail-sheet');
+    }
+
+    function pickMarker(clientX, clientY) {
+        mouseNdc.x = (clientX / window.innerWidth) * 2 - 1;
+        mouseNdc.y = -(clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(mouseNdc, camera);
+
+        // Only test against markerGroup children (markers + route lines). We'll filter by userData.key.
+        const hits = raycaster.intersectObjects(markerGroup.children, true);
+        if (!hits || !hits.length) return null;
+
+        for (const h of hits) {
+            const obj = h.object;
+            const key = obj?.userData?.key;
+            if (key && trips[key]) return key;
+        }
+        return null;
+    }
+
+    window.addEventListener('pointerdown', (e) => {
+        // don't steal clicks from UI
+        if (isClickOnUI(e.target)) return;
+
+        const key = pickMarker(e.clientX, e.clientY);
+        if (key) {
+            openDetail(key);
+            flyTo(trips[key].lat, trips[key].lon);
+        }
+    }, { passive: true });
 </script>
 </body>
 </html>
+
+
+
