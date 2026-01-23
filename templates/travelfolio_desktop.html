@@ -13,6 +13,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
 
     <style>
         /* --- Material 3 Expressive-ish Theme Tokens --- */
@@ -369,7 +370,7 @@
     <!-- Splash Screen -->
 <div id="splash-screen">
     <div class="splash-logo">
-        <span class="material-symbols-outlined text-white text-5xl">flight_takeoff</span>
+        <img src="../static/logo.png" alt="TravelFolio Logo" class="w-16 h-16 object-contain">
     </div>
     <div class="text-center">
         <h1 class="text-3xl font-black tracking-tighter text-white uppercase mb-1">TravelFolio 3D</h1>
@@ -395,8 +396,8 @@
     <div class="absolute top-0 left-0 right-0 z-40 pt-8 pb-4 px-8 bg-gradient-to-b from-slate-900/90 to-transparent pointer-events-none">
         <div class="content-limit flex justify-between items-center">
             <div class="flex items-center gap-4 pointer-events-auto cursor-pointer" onclick="switchView('home')">
-                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-                    <span class="material-symbols-outlined text-white">flight_takeoff</span>
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 p-2">
+                    <img src="../static/logo.png" alt="TravelFolio Logo" class="w-full h-full object-contain">
                 </div>
                 <span class="text-2xl font-black tracking-tighter text-white uppercase">TravelFolio</span>
             </div>
@@ -538,6 +539,8 @@
     let priceAlerts = JSON.parse(localStorage.getItem('tf_alerts')) || [];
     let passengerCounts = { adults: 1, children: 0, infants: 0 };
     let currentDetailKey = null;
+    let qtChannelReady = false;
+    let lastSearchContext = null;
 
     function persistState() {
         localStorage.setItem('tf_trips', JSON.stringify(trips));
@@ -545,122 +548,138 @@
     }
 
     // --- THREE.JS ENGINE ---
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.z = 15;
+    let scene, camera, renderer, controls, globeGroup, markerGroup;
+    let earthMaterial, stars, atmosphere, moonGroup, sunSprite;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    document.getElementById('canvas-container').appendChild(renderer.domElement);
+    function initThreeJS() {
+        const container = document.getElementById('canvas-container');
+        if (!container) {
+            console.error('Canvas container not found');
+            return;
+        }
 
-    const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.autoRotate = true;
-    controls.autoRotateSpeed = 0.5;
-    // Zoom Limits
-    controls.minDistance = 7;
-    controls.maxDistance = 30;
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+        camera.position.z = 15;
 
-    const globeGroup = new THREE.Group(); scene.add(globeGroup);
-    const texLoad = new THREE.TextureLoader();
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(renderer.domElement);
 
-    // Background Stars
-    const starGeo = new THREE.BufferGeometry();
-    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05, transparent: true, opacity: 0.8 });
-    const starVerts = [];
-    for(let i=0; i<5000; i++) starVerts.push((Math.random()-0.5)*150, (Math.random()-0.5)*150, (Math.random()-0.5)*150);
-    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts, 3));
-    const stars = new THREE.Points(starGeo, starMat);
-    scene.add(stars);
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 0.5;
+        // Zoom Limits
+        controls.minDistance = 7;
+        controls.maxDistance = 30;
 
-    // Atmosphere Glow
-    const atmosphere = new THREE.Mesh(
-        new THREE.SphereGeometry(5.2, 64, 64),
-        new THREE.MeshPhongMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.1, side: THREE.BackSide, blending: THREE.AdditiveBlending })
-    );
-    scene.add(atmosphere);
+        globeGroup = new THREE.Group();
+        scene.add(globeGroup);
+        const texLoad = new THREE.TextureLoader();
 
-    // Earth with Emissive City Lights
-    const earthMaterial = new THREE.MeshStandardMaterial({
-        map: texLoad.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg'),
-        emissiveMap: texLoad.load('https://unpkg.com/three-globe/example/img/earth-night.jpg'),
-        emissive: new THREE.Color(0xffffcc),
-        emissiveIntensity: 0.4,
-        roughness: 0.7, metalness: 0.2
-    });
-    const earth = new THREE.Mesh(new THREE.SphereGeometry(5, 64, 64), earthMaterial);
-    globeGroup.add(earth);
+        // Background Stars
+        const starGeo = new THREE.BufferGeometry();
+        const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05, transparent: true, opacity: 0.8 });
+        const starVerts = [];
+        for(let i=0; i<5000; i++) starVerts.push((Math.random()-0.5)*150, (Math.random()-0.5)*150, (Math.random()-0.5)*150);
+        starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts, 3));
+        stars = new THREE.Points(starGeo, starMat);
+        scene.add(stars);
 
-    // REALISTISCHER MOND MIT HEIGHT-MAP (DISPLACEMENT)
-    const moonGeometry = new THREE.SphereGeometry(1.25, 128, 128); // Höhere Auflösung für Displacement
-    const moonTexture = texLoad.load('https://unpkg.com/three-globe/example/img/moon.jpg');
-    const moonMaterial = new THREE.MeshStandardMaterial({
-        map: moonTexture,
-        bumpMap: moonTexture,
-        bumpScale: 0.05,
-        displacementMap: moonTexture, // Height Map
-        displacementScale: 0.1,       // Stärke der Verformung
-        roughness: 1.0,
-        metalness: 0.0
-    });
-    const moon = new THREE.Mesh(moonGeometry, moonMaterial);
-    moon.rotation.x = Math.PI / 8;
-    scene.add(moon);
+        // Atmosphere Glow
+        atmosphere = new THREE.Mesh(
+            new THREE.SphereGeometry(5.2, 64, 64),
+            new THREE.MeshPhongMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.1, side: THREE.BackSide, blending: THREE.AdditiveBlending })
+        );
+        scene.add(atmosphere);
 
-    // SICHTBARE SONNE
-    const sunGeometry = new THREE.SphereGeometry(4, 64, 64);
-    const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xfff9e6 });
-    const sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
-    sunMesh.position.set(150, 80, 150);
-    scene.add(sunMesh);
+        // Earth with Emissive City Lights
+        earthMaterial = new THREE.MeshStandardMaterial({
+            map: texLoad.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg'),
+            emissiveMap: texLoad.load('https://unpkg.com/three-globe/example/img/earth-night.jpg'),
+            emissive: new THREE.Color(0xffffcc),
+            emissiveIntensity: 0.4,
+            roughness: 0.7, metalness: 0.2
+        });
+        const earth = new THREE.Mesh(new THREE.SphereGeometry(5, 64, 64), earthMaterial);
+        globeGroup.add(earth);
 
-    // SONNEN-LICHT
-    scene.add(new THREE.AmbientLight(0x333333));
-    const sunLight = new THREE.DirectionalLight(0xffffff, 1.8);
-    sunLight.position.copy(sunMesh.position);
-    scene.add(sunLight);
+        // REALISTISCHER MOND MIT HEIGHT-MAP (DISPLACEMENT)
+        const moonGeometry = new THREE.SphereGeometry(1.25, 128, 128); // Höhere Auflösung für Displacement
+        const moonTexture = texLoad.load('https://unpkg.com/three-globe/example/img/moon.jpg');
+        const moonMaterial = new THREE.MeshStandardMaterial({
+            map: moonTexture,
+            bumpMap: moonTexture,
+            bumpScale: 0.05,
+            displacementMap: moonTexture, // Height Map
+            displacementScale: 0.1,       // Stärke der Verformung
+            roughness: 1.0,
+            metalness: 0.0
+        });
+        const moon = new THREE.Mesh(moonGeometry, moonMaterial);
+        moon.rotation.x = Math.PI / 8;
+        scene.add(moon);
 
-    // --- REALISTIC SUN MESH ---
-    const sunGroup = new THREE.Group();
-    sunGroup.position.copy(sunLight.position);
-    scene.add(sunGroup);
+        // SICHTBARE SONNE
+        const sunGeometry = new THREE.SphereGeometry(4, 64, 64);
+        const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xfff9e6 });
+        const sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
+        sunMesh.position.set(150, 80, 150);
+        scene.add(sunMesh);
 
-    // 1. Sun Core
-    const sunGeo = new THREE.SphereGeometry(3, 32, 32);
-    const sunMat = new THREE.MeshBasicMaterial({ color: 0xffddaa });
-    const sunCore = new THREE.Mesh(sunGeo, sunMat);
-    sunGroup.add(sunCore);
+        // SONNEN-LICHT
+        scene.add(new THREE.AmbientLight(0x333333));
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1.8);
+        sunLight.position.copy(sunMesh.position);
+        scene.add(sunLight);
 
-    // 2. Sun Glow (Sprite)
-    const textureLoader = new THREE.TextureLoader();
-    const spriteMaterial = new THREE.SpriteMaterial({
-        map: textureLoader.load('https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/sprites/glow.png'),
-        color: 0xffaa00,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        opacity: 0.8
-    });
-    const sunSprite = new THREE.Sprite(spriteMaterial);
-    sunSprite.scale.set(35, 35, 1.0);
-    sunGroup.add(sunSprite);
+        // --- REALISTIC SUN MESH ---
+        const sunGroup = new THREE.Group();
+        sunGroup.position.copy(sunLight.position);
+        scene.add(sunGroup);
+
+        // 1. Sun Core
+        const sunGeo = new THREE.SphereGeometry(3, 32, 32);
+        const sunMat = new THREE.MeshBasicMaterial({ color: 0xffddaa });
+        const sunCore = new THREE.Mesh(sunGeo, sunMat);
+        sunGroup.add(sunCore);
+
+        // 2. Sun Glow (Sprite)
+        const textureLoader = new THREE.TextureLoader();
+        const spriteMaterial = new THREE.SpriteMaterial({
+            map: textureLoader.load('https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/sprites/glow.png'),
+            color: 0xffaa00,
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            opacity: 0.8
+        });
+        sunSprite = new THREE.Sprite(spriteMaterial);
+        sunSprite.scale.set(35, 35, 1.0);
+        sunGroup.add(sunSprite);
 
 
-    // --- REALISTIC MOON ---
-    const moonGroup = new THREE.Group(); // Pivot for rotation around earth
-    scene.add(moonGroup);
+        // --- REALISTIC MOON ---
+        moonGroup = new THREE.Group(); // Pivot for rotation around earth
+        scene.add(moonGroup);
 
-    const moonGeo = new THREE.SphereGeometry(1.35, 32, 32); // Moon is ~1/4 size of Earth (5 radius -> 1.35)
-    const moonMat = new THREE.MeshStandardMaterial({
-        map: textureLoader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg'),
-        roughness: 0.8,
-        metalness: 0.1
-    });
-    const moonMesh = new THREE.Mesh(moonGeo, moonMat);
-    moonMesh.position.set(20, 0, 0); // Distance from Earth
-    moonGroup.add(moonMesh);
+        const moonGeo = new THREE.SphereGeometry(1.35, 32, 32); // Moon is ~1/4 size of Earth (5 radius -> 1.35)
+        const moonMat = new THREE.MeshStandardMaterial({
+            map: textureLoader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg'),
+            roughness: 0.8,
+            metalness: 0.1
+        });
+        const moonMesh = new THREE.Mesh(moonGeo, moonMat);
+        moonMesh.position.set(20, 0, 0); // Distance from Earth
+        moonGroup.add(moonMesh);
 
-    const markerGroup = new THREE.Group(); globeGroup.add(markerGroup);
+        markerGroup = new THREE.Group();
+        globeGroup.add(markerGroup);
+
+        // Start animation
+        animate();
+    }
 
     function latLonToPos(lat, lon, r) {
         const phi = (90 - lat) * (Math.PI / 180);
@@ -742,7 +761,16 @@
         earthMaterial.emissiveIntensity = 0.3 + Math.sin(t * 0.001) * 0.1;
         renderer.render(scene, camera);
     }
-    animate();
+
+    window.addEventListener('resize', () => {
+        if (!camera || !renderer) return;
+        const container = document.getElementById('canvas-container');
+        if (!container) return;
+
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+    });
 
     // --- UI HELPERS ---
 
@@ -751,16 +779,75 @@
         document.getElementById(`count-${type}`).innerText = passengerCounts[type];
     }
 
+    function setSearchLoading(isLoading) {
+        const btn = document.getElementById('btn-search-trigger');
+        if (!btn) return;
+        if (isLoading) {
+            btn.disabled = true;
+            btn.innerHTML = `<div class="flex items-center justify-center gap-2"><div class="loading-ring"></div> SUCHE...</div>`;
+        } else {
+            btn.disabled = false;
+            btn.innerText = "FLÜGE SUCHEN";
+        }
+    }
+
+    function handleSearchResults(data) {
+        const origin = data?.origin || lastSearchContext?.origin;
+        const dest = data?.destination || lastSearchContext?.destination;
+        setSearchLoading(false);
+
+        while(markerGroup.children.length > 0) markerGroup.remove(markerGroup.children[0]);
+
+        if (data?.success && Array.isArray(data.flights) && data.flights.length) {
+            const normalizedFlights = data.flights.map(f => {
+                const priceVal = typeof f.price === 'number' ? formatEuro(f.price) : (f.price || '');
+                return {
+                    airline: f.airline || 'Airline',
+                    price: priceVal,
+                    departure: f.departure || '',
+                    arrival: f.arrival || '',
+                    duration: f.duration || '',
+                    stops: f.stops ?? ''
+                };
+            });
+            renderResults(normalizedFlights, dest, origin);
+            drawFlightPath(origin, dest);
+            flyTo(cityDatabase[dest]?.lat || 0, cityDatabase[dest]?.lon || 0);
+        } else {
+            mockSearch(dest, origin);
+        }
+    }
+
+    function initWebChannel() {
+        if (typeof qt === 'undefined' || typeof QWebChannel === 'undefined') return;
+        try {
+            new QWebChannel(qt.webChannelTransport, (channel) => {
+                window.backend = channel.objects.backend;
+                if (window.backend?.resultsReady?.connect) {
+                    window.backend.resultsReady.connect((payload) => handleSearchResults(payload || {}));
+                }
+                qtChannelReady = true;
+                console.info('Qt WebChannel verbunden');
+            });
+        } catch (e) {
+            console.warn('Qt WebChannel initialisierung fehlgeschlagen', e);
+        }
+    }
+
     async function performSearch() {
         const origin = document.getElementById('input-origin').value.trim().toUpperCase();
         const dest = document.getElementById('input-dest').value.trim().toUpperCase();
         const date = document.getElementById('input-start').value;
-        const btn = document.getElementById('btn-search-trigger');
 
-        if(!origin || !dest || !date) return;
+        if (!origin || !dest || !date) return;
 
-        btn.disabled = true;
-        btn.innerHTML = `<div class="flex items-center justify-center gap-2"><div class="loading-ring"></div> SUCHE...</div>`;
+        lastSearchContext = { origin, destination: dest, date };
+        setSearchLoading(true);
+
+        if (qtChannelReady && window.backend && typeof window.backend.search_flights === 'function') {
+            window.backend.search_flights(origin, dest, date, passengerCounts);
+            return;
+        }
 
         try {
             const res = await fetch('/api/search', {
@@ -769,19 +856,10 @@
                 body: JSON.stringify({ origin, destination: dest, date, passengers: passengerCounts })
             });
             const data = await res.json();
-
-            // Marker leeren vor neuer Suche, um Route zu visualisieren
-            while(markerGroup.children.length > 0) markerGroup.remove(markerGroup.children[0]);
-
-            if(data.success && data.flights.length > 0) {
-                renderResults(data.flights, dest, origin);
-                drawFlightPath(origin, dest); // Bogen zeichnen
-                flyTo(cityDatabase[dest]?.lat || 0, cityDatabase[dest]?.lon || 0);
-            } else {
-                mockSearch(dest, origin);
-            }
-        } catch(e) { mockSearch(dest, origin); }
-        finally { btn.disabled = false; btn.innerText = "FLÜGE SUCHEN"; }
+            handleSearchResults({ ...data, origin, destination: dest });
+        } catch (e) {
+            handleSearchResults({ success: false, origin, destination: dest });
+        }
     }
 
     function mockSearch(cityName, originName) {
@@ -791,6 +869,7 @@
         ];
         renderResults(dummyData, cityName, originName);
         drawFlightPath(originName, cityName);
+        setSearchLoading(false);
     }
 
     // --- Preis-/Alert-Helpers ---
@@ -1297,6 +1376,9 @@
 
     // Attach ripples to key buttons AND init data
     document.addEventListener('DOMContentLoaded', () => {
+        // Initialize Three.js scene first
+        initThreeJS();
+
         attachRipple(document.getElementById('btn-search-trigger'));
         attachRipple(document.getElementById('nav-home'));
         attachRipple(document.getElementById('nav-trips'));
@@ -1305,6 +1387,9 @@
         renderMarkers();
         renderPlanning();
         renderAlerts();
+
+        // Desktop (Qt) bridge initialisation; noop in browser
+        initWebChannel();
     });
 
     // --- Marker picking (Click on globe markers opens the right trip) ---
