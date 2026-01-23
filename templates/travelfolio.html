@@ -3,7 +3,8 @@
 <head>
     <meta charset="utf-8">
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
-    <title>TravelFolio 3D - Universal Edition</title>
+    <title>TravelFolio</title>
+    <link rel="icon" type="image/x-icon" href="/static/logo.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
 
@@ -445,16 +446,86 @@
         "BER": {lat: 52.36, lon: 13.50}, "CDG": {lat: 49.00, lon: 2.55}, "DXB": {lat: 25.25, lon: 55.36}
     };
 
-    let trips = JSON.parse(localStorage.getItem('tf_trips')) || {};
-    let priceAlerts = JSON.parse(localStorage.getItem('tf_alerts')) || [];
+    let trips = {};
+    let priceAlerts = [];
     let passengerCounts = { adults: 1, children: 0, infants: 0 };
     let currentDetailKey = null;
     let qtChannelReady = false;
     let lastSearchContext = null;
+    let appReady = false;
+    let threeJSReady = false;
+    let dataReady = false;
+    let splashStartTime = Date.now();
+    const MIN_SPLASH_TIME = 2500; // Minimum 2.5 seconds splash display
 
     function persistState() {
-        localStorage.setItem('tf_trips', JSON.stringify(trips));
-        localStorage.setItem('tf_alerts', JSON.stringify(priceAlerts));
+        // Desktop version: Save to local files via Qt backend
+        if (qtChannelReady && window.backend?.save_data) {
+            const data = {
+                trips: trips,
+                alerts: priceAlerts
+            };
+            window.backend.save_data(JSON.stringify(data));
+            console.log('💾 Data save requested via Qt backend');
+        } else {
+            // Web version: Use localStorage
+            localStorage.setItem('tf_trips', JSON.stringify(trips));
+            localStorage.setItem('tf_alerts', JSON.stringify(priceAlerts));
+            console.log('💾 Data saved to localStorage');
+        }
+    }
+
+    function loadData() {
+        console.log('loadData() called, qtChannelReady:', qtChannelReady);
+
+        // Desktop version: Request load from Qt backend (will trigger dataLoaded signal)
+        if (qtChannelReady && window.backend?.load_data) {
+            console.log('📥 Requesting data load from Qt backend...');
+            window.backend.load_data();
+            // Data will be received via dataLoaded signal
+            return true;
+        } else {
+            // Web version: Load from localStorage
+            console.log('📥 Loading via localStorage...');
+            trips = JSON.parse(localStorage.getItem('tf_trips')) || {};
+            priceAlerts = JSON.parse(localStorage.getItem('tf_alerts')) || [];
+            console.log('✅ Data loaded from localStorage:', Object.keys(trips).length, 'trips,', priceAlerts.length, 'alerts');
+
+            dataReady = true;
+            checkAndHideSplash();
+            return true;
+        }
+    }
+
+    function handleDataLoaded(data) {
+        console.log('📦 handleDataLoaded called with data:', data);
+
+        if (!data) {
+            console.error('❌ No data received');
+            dataReady = true;
+            checkAndHideSplash();
+            return;
+        }
+
+        trips = data.trips || {};
+        priceAlerts = data.alerts || [];
+
+        console.log('✅ Data loaded via Qt backend:', Object.keys(trips).length, 'trips,', priceAlerts.length, 'alerts');
+        console.log('Trips object:', trips);
+        console.log('Alerts array:', priceAlerts);
+
+        // Update UI after data is loaded
+        console.log('🎨 Updating UI with loaded data...');
+        setTimeout(() => {
+            renderMarkers();
+            renderAllFlightPaths();
+            renderAlerts();
+            renderPlanning();
+            console.log('✅ UI updated after data load');
+
+            dataReady = true;
+            checkAndHideSplash();
+        }, 100);
     }
 
     // --- THREE.JS ENGINE ---
@@ -476,7 +547,7 @@
 
         controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
-        controls.autoRotate = true;
+        controls.autoRotate = false;
         controls.autoRotateSpeed = 0.5;
         controls.minDistance = 7;
         controls.maxDistance = 30;
@@ -573,6 +644,10 @@
         globeGroup.add(markerGroup);
 
         animate();
+
+        console.log('✅ Three.js initialized');
+        threeJSReady = true;
+        checkAndHideSplash();
     }
 
     function latLonToPos(lat, lon, r) {
@@ -599,15 +674,73 @@
     }
 
     function renderMarkers() {
-        while(markerGroup.children.length > 0) markerGroup.remove(markerGroup.children[0]);
+        console.log('🎯 renderMarkers() called, trips count:', Object.keys(trips).length);
+        console.log('Trips data:', trips);
+
+        if (!markerGroup) {
+            console.error('❌ markerGroup not initialized!');
+            return;
+        }
+
+        // Remove only markers, keep flight path lines
+        const toRemove = [];
+        markerGroup.children.forEach(child => {
+            // Remove spheres (markers) but keep lines (flight paths)
+            if (child.type === 'Mesh' && child.geometry?.type === 'SphereGeometry') {
+                toRemove.push(child);
+            }
+        });
+        toRemove.forEach(child => markerGroup.remove(child));
+        console.log(`Removed ${toRemove.length} old markers`);
+
+        // Add new markers
+        let addedCount = 0;
         Object.keys(trips).forEach(key => {
             const t = trips[key];
-            const m = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), new THREE.MeshBasicMaterial({ color: 0x22d3ee }));
+            console.log(`Adding marker for trip ${key}:`, t);
+
+            if (!t.lat || !t.lon) {
+                console.warn(`⚠️ Trip ${key} missing coordinates`);
+                return;
+            }
+
+            const m = new THREE.Mesh(
+                new THREE.SphereGeometry(0.12, 16, 16),
+                new THREE.MeshBasicMaterial({ color: 0x22d3ee })
+            );
             m.position.copy(latLonToPos(t.lat, t.lon, 5.05));
             m.userData = { key };
             markerGroup.add(m);
+            addedCount++;
         });
-        document.getElementById('stat-count').innerText = Object.keys(trips).length;
+
+        console.log(`✅ Added ${addedCount} markers to globe`);
+        const statCount = document.getElementById('stat-count');
+        if (statCount) {
+            statCount.innerText = Object.keys(trips).length;
+            console.log('Updated stat-count to:', Object.keys(trips).length);
+        } else {
+            console.error('❌ stat-count element not found!');
+        }
+    }
+
+    function renderAllFlightPaths() {
+        // Remove all existing flight paths (lines)
+        const toRemove = [];
+        markerGroup.children.forEach(child => {
+            if (child.type === 'Line') {
+                toRemove.push(child);
+            }
+        });
+        toRemove.forEach(child => markerGroup.remove(child));
+
+        // Redraw flight paths for all trips that have origin data
+        Object.keys(trips).forEach(key => {
+            const trip = trips[key];
+            if (trip.origin && trip.title && cityDatabase[trip.origin] && cityDatabase[trip.title]) {
+                drawFlightPath(trip.origin, trip.title);
+            }
+        });
     }
 
     function animate(t) {
@@ -680,15 +813,43 @@
 
     // --- BRIDGING (QT / FLASK) ---
     function initWebChannel() {
-        if (typeof qt === 'undefined' || typeof QWebChannel === 'undefined') return;
-        new QWebChannel(qt.webChannelTransport, (channel) => {
-            window.backend = channel.objects.backend;
-            if (window.backend?.resultsReady?.connect) {
-                window.backend.resultsReady.connect((payload) => handleSearchResults(payload));
-            }
-            qtChannelReady = true;
-            console.info('Qt WebChannel verbunden');
-        });
+        if (typeof qt === 'undefined' || typeof QWebChannel === 'undefined') {
+            console.log('Qt WebChannel nicht verfügbar - läuft als Web-Version');
+            return;
+        }
+        try {
+            new QWebChannel(qt.webChannelTransport, (channel) => {
+                window.backend = channel.objects.backend;
+
+                // Connect resultsReady signal for flight search
+                if (window.backend?.resultsReady?.connect) {
+                    window.backend.resultsReady.connect((payload) => {
+                        console.log('Qt Signal empfangen:', payload);
+                        handleSearchResults(payload || {});
+                    });
+                }
+
+                // Connect dataLoaded signal for persistent data
+                if (window.backend?.dataLoaded?.connect) {
+                    window.backend.dataLoaded.connect((data) => {
+                        console.log('📦 dataLoaded signal received');
+                        handleDataLoaded(data);
+                    });
+                    console.log('✅ dataLoaded signal handler connected');
+                }
+
+                qtChannelReady = true;
+                console.info('Qt WebChannel erfolgreich verbunden');
+
+                // Request data load from backend
+                console.log('🔄 Requesting data load...');
+                loadData();
+            });
+        } catch (e) {
+            console.error('Qt WebChannel Initialisierung fehlgeschlagen:', e);
+            // Fallback to localStorage if WebChannel fails
+            loadData();
+        }
     }
 
     async function performSearch() {
@@ -696,18 +857,35 @@
         const dest = document.getElementById('input-dest').value.trim().toUpperCase();
         const date = document.getElementById('input-start').value;
 
-        if (!origin || !dest || !date) return;
+        if (!origin || !dest || !date) {
+            showToast('Bitte alle Felder ausfüllen');
+            return;
+        }
 
         lastSearchContext = { origin, destination: dest, date };
         setSearchLoading(true);
 
         // Fall A: Desktop (Qt)
         if (qtChannelReady && window.backend) {
-            window.backend.search_flights(origin, dest, date, passengerCounts);
+            console.log('Suche über Qt Backend:', { origin, dest, date, passengerCounts });
+            try {
+                if (typeof window.backend.search_flights === 'function') {
+                    window.backend.search_flights(origin, dest, date, passengerCounts);
+                } else {
+                    console.error('search_flights Methode nicht gefunden');
+                    showToast('Desktop-Backend-Fehler');
+                    setSearchLoading(false);
+                }
+            } catch (e) {
+                console.error('Qt Backend Fehler:', e);
+                showToast('Fehler beim Aufruf des Backends');
+                setSearchLoading(false);
+            }
             return;
         }
 
         // Fall B: Web (Flask)
+        console.log('Suche über Flask API:', { origin, dest, date });
         try {
             const res = await fetch('/api/search', {
                 method: 'POST',
@@ -715,8 +893,10 @@
                 body: JSON.stringify({ origin, destination: dest, date, passengers: passengerCounts })
             });
             const data = await res.json();
-            handleSearchResults(data);
+            handleSearchResults({ ...data, origin, destination: dest });
         } catch (e) {
+            console.error('Search error:', e);
+            showToast('Fehler bei der Suche, zeige Beispielergebnisse');
             mockSearch(dest, origin);
         }
     }
@@ -743,8 +923,11 @@
         list.innerHTML = '';
 
         flights.forEach((f, idx) => {
+            const priceNum = parsePriceToNumber(f.price);
+            const priceDisplay = f.price ?? '';
+
             list.innerHTML += `
-                <div class="flight-result-card enter-pop" style="animation-delay:${idx * 40}ms">
+                <div class="flight-result-card enter-pop" style="animation-delay:${Math.min(idx * 40, 240)}ms">
                     <div class="flex items-center gap-4">
                         <div class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center font-black text-cyan-400 border border-slate-700">${f.airline.substring(0,2)}</div>
                         <div>
@@ -754,14 +937,29 @@
                     </div>
                     <div class="text-right flex items-center gap-4">
                         <div class="min-w-[92px]">
-                            <p class="text-lg font-black text-white">${f.price}</p>
+                            <p class="text-lg font-black text-white">${priceDisplay}</p>
                             <p class="text-[9px] text-slate-400 uppercase tracking-widest font-bold">aktueller Preis</p>
                         </div>
-                        <button onclick="saveTrip('${cityName}', '${f.airline}', '${f.price}', '${originName}')" class="px-3 py-1 bg-cyan-500 text-slate-900 rounded-lg font-black text-[9px] uppercase hover:scale-105 transition">Planen</button>
+                        <div class="flex flex-col gap-2">
+                            <button data-ripple="true" onclick="saveTrip('${cityName}', '${f.airline}', '${priceDisplay}', '${originName}')" class="px-3 py-1 bg-cyan-500 text-slate-900 rounded-lg font-black text-[9px] uppercase">Planen</button>
+
+                            <div class="flex items-center gap-2 justify-end">
+                                <input id="alert-${cityName}-${idx}" inputmode="numeric" placeholder="Zielpreis" class="search-input" style="padding:0.45rem 0.6rem;border-radius:0.9rem;width:110px;font-size:0.75rem" />
+                                <button data-ripple="true" onclick="addAlertFromResult('${cityName}', '${priceDisplay}', 'alert-${cityName}-${idx}')" class="px-3 py-1 border border-slate-700 rounded-lg font-black text-[9px] uppercase">Alarm</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
+
+            // Check existing alerts for this destination against this flight price
+            if (typeof priceNum === 'number') {
+                checkAlertsForDestination(cityName, priceNum, `${f.airline} • ${f.departure}`);
+            }
         });
+
+        // Ripple for dynamically created buttons
+        list.querySelectorAll('[data-ripple="true"]').forEach(attachRipple);
         showToast('Ergebnisse aktualisiert');
     }
 
@@ -772,7 +970,8 @@
             title: dest,
             origin: origin,
             date: (new Date()).toLocaleDateString('de-DE', { month: 'short', year: 'numeric' }).toUpperCase(),
-            lat: coords.lat, lon: coords.lon,
+            lat: coords.lat,
+            lon: coords.lon,
             img: `https://loremflickr.com/800/600/city,${dest}?lock=${Math.floor(Math.random() * 100)}`,
             itinerary: [
                 { title: 'Hinflug', desc: `${airline} • ${priceText}` },
@@ -782,9 +981,223 @@
         persistState();
         renderMarkers();
         renderPlanning();
+
+        // Draw flight path if origin is known
+        if (origin && dest && cityDatabase[origin] && cityDatabase[dest]) {
+            drawFlightPath(origin, dest);
+        }
+
         hideAddTripModal();
         flyTo(coords.lat, coords.lon);
         showToast('Trip gespeichert');
+    }
+
+    // --- PRICE ALERT FUNCTIONS ---
+    function parsePriceToNumber(priceText) {
+        if (!priceText) return null;
+        // Accept formats like "420€", "€420", "1.299€", "1,299.50 €"
+        const cleaned = String(priceText)
+            .replace(/\s/g, '')
+            .replace(/€/g, '')
+            .replace(/EUR/ig, '')
+            .replace(/\.(?=\d{3}(\D|$))/g, '') // remove thousand separators like 1.299
+            .replace(/,(?=\d{2}(\D|$))/g, '.'); // convert decimal comma to dot
+
+        const num = Number(cleaned.replace(/[^0-9.]/g, ''));
+        return Number.isFinite(num) ? num : null;
+    }
+
+    function formatEuro(n) {
+        if (typeof n !== 'number' || !Number.isFinite(n)) return '';
+        try {
+            return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+        } catch {
+            return `${Math.round(n)}€`;
+        }
+    }
+
+    function notifyPriceHit(alert, currentPriceNumber, contextText) {
+        // de-dup: only notify once per alert until it goes above target again
+        if (alert?.notifiedAt && alert?.lastSeenPrice != null && alert.lastSeenPrice <= alert.targetPrice) {
+            return;
+        }
+
+        alert.notifiedAt = Date.now();
+        alert.lastSeenPrice = currentPriceNumber;
+
+        // UI signals
+        document.getElementById('notif-badge').classList.remove('hidden');
+        showToast(`Preisalarm: ${alert.dest} jetzt ${formatEuro(currentPriceNumber)}!`);
+
+        // Push to notification feed
+        const notif = {
+            id: Date.now() + Math.random(),
+            type: 'price_hit',
+            title: 'Preisalarm erreicht',
+            message: `${alert.dest}: ${formatEuro(currentPriceNumber)} ≤ ${formatEuro(alert.targetPrice)}${contextText ? ' • ' + contextText : ''}`,
+            ts: Date.now()
+        };
+
+        window.__tfNotifs = window.__tfNotifs || [];
+        window.__tfNotifs.unshift(notif);
+        renderNotifications();
+    }
+
+    function renderNotifications() {
+        const container = document.getElementById('notif-content');
+        if (!container) return;
+        const notifs = window.__tfNotifs || [];
+
+        if (!notifs.length) {
+            container.innerHTML = '<div class="p-4 text-slate-400 text-sm">Keine neuen Benachrichtigungen</div>';
+            return;
+        }
+
+        container.innerHTML = '';
+        notifs.slice(0, 15).forEach(n => {
+            const date = new Date(n.ts);
+            const time = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+            container.innerHTML += `
+                <div class="p-4 hover:bg-slate-700/50 rounded-xl cursor-pointer transition">
+                    <span class="text-cyan-400 text-[10px] font-bold uppercase tracking-widest">${n.title} • ${time}</span>
+                    <p class="text-sm mt-1 text-slate-200">${n.message}</p>
+                </div>
+            `;
+        });
+    }
+
+    function addAlertFromResult(dest, currentPriceText, inputId) {
+        const input = document.getElementById(inputId);
+        const raw = input ? input.value : '';
+        const target = parsePriceToNumber(raw);
+        const current = parsePriceToNumber(currentPriceText);
+
+        if (target == null || target <= 0) {
+            showToast('Bitte einen gültigen Zielpreis eingeben');
+            if (input) input.focus();
+            return;
+        }
+
+        addAlert(dest, target, current);
+        if (input) input.value = '';
+    }
+
+    function addAlert(dest, targetPriceNumber, currentPriceNumber) {
+        // Prevent duplicates for same destination + target
+        const exists = priceAlerts.some(a => a.dest === dest && a.targetPrice === targetPriceNumber);
+        if (exists) {
+            showToast('Preisalarm existiert schon');
+            return;
+        }
+
+        priceAlerts.push({
+            id: Date.now(),
+            dest,
+            targetPrice: targetPriceNumber,
+            createdAt: Date.now(),
+            lastSeenPrice: typeof currentPriceNumber === 'number' ? currentPriceNumber : null,
+            notifiedAt: null
+        });
+
+        persistState(); // Save
+
+        document.getElementById('notif-badge').classList.remove('hidden');
+        showToast(`Preisalarm gesetzt: ${dest} ≤ ${formatEuro(targetPriceNumber)}`);
+        renderAlerts();
+
+        // immediate hit check (if we know the current price)
+        if (typeof currentPriceNumber === 'number' && currentPriceNumber <= targetPriceNumber) {
+            const alert = priceAlerts.find(a => a.dest === dest && a.targetPrice === targetPriceNumber);
+            if (alert) notifyPriceHit(alert, currentPriceNumber, 'Sofort-Treffer');
+        }
+    }
+
+    function deleteAlert(alertId) {
+        priceAlerts = priceAlerts.filter(a => a.id !== alertId);
+        persistState(); // Save
+        renderAlerts();
+        showToast('Preisalarm entfernt');
+    }
+
+    function checkAlertsForDestination(dest, currentPriceNumber, contextText) {
+        if (!priceAlerts?.length) return;
+        let changed = false;
+        priceAlerts
+            .filter(a => a.dest === dest)
+            .forEach(a => {
+                a.lastSeenPrice = currentPriceNumber;
+                // reset notified state if price went above target again (so future drops can notify)
+                if (a.notifiedAt && currentPriceNumber > a.targetPrice) {
+                    a.notifiedAt = null;
+                }
+                if (currentPriceNumber <= a.targetPrice) {
+                    notifyPriceHit(a, currentPriceNumber, contextText);
+                }
+                changed = true; // prices updated
+            });
+
+        if (changed) persistState();
+    }
+
+    function renderAlerts() {
+        const c = document.getElementById('alerts-container');
+        if (!c) return;
+
+        c.innerHTML = priceAlerts.length
+            ? ''
+            : '<p class="text-center col-span-full py-20 text-slate-500 font-bold uppercase text-xs tracking-widest">Keine Preisalarme gesetzt</p>';
+
+        priceAlerts
+            .slice()
+            .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+            .forEach(a => {
+                const last = typeof a.lastSeenPrice === 'number' ? formatEuro(a.lastSeenPrice) : '—';
+                const target = formatEuro(a.targetPrice);
+                const status = (typeof a.lastSeenPrice === 'number')
+                    ? (a.lastSeenPrice <= a.targetPrice ? 'Treffer' : 'Warten')
+                    : 'Aktiv';
+
+                c.innerHTML += `
+                    <div class="glass-card rounded-3xl p-7 flex flex-col gap-4">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 bg-cyan-500/15 text-cyan-300 rounded-full flex items-center justify-center border border-cyan-400/20">
+                                    <span class="material-symbols-outlined">notifications_active</span>
+                                </div>
+                                <div>
+                                    <h3 class="font-black text-2xl text-white">${a.dest}</h3>
+                                    <p class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Zielpreis ≤ ${target}</p>
+                                </div>
+                            </div>
+                            <button data-ripple="true" onclick="deleteAlert(${a.id})" class="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition">
+                                <span class="material-symbols-outlined text-slate-200" style="font-size:20px">delete</span>
+                            </button>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-3">
+                            <div class="bg-slate-900/30 border border-white/10 rounded-2xl p-4">
+                                <p class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Letzter Preis</p>
+                                <p class="text-lg font-black text-white mt-1">${last}</p>
+                            </div>
+                            <div class="bg-slate-900/30 border border-white/10 rounded-2xl p-4">
+                                <p class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Ziel</p>
+                                <p class="text-lg font-black text-white mt-1">${target}</p>
+                            </div>
+                            <div class="bg-slate-900/30 border border-white/10 rounded-2xl p-4">
+                                <p class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Status</p>
+                                <p class="text-lg font-black ${status==='Treffer' ? 'text-cyan-300' : 'text-slate-200'} mt-1">${status}</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between">
+                            <p class="text-[10px] text-slate-500 uppercase font-black tracking-widest">Wir benachrichtigen dich, sobald der Preis erreicht ist.</p>
+                            <button data-ripple="true" onclick="showToast('Tipp: Suche erneut, um Preise zu aktualisieren')" class="px-3 py-1 rounded-lg border border-slate-700 font-black text-[9px] uppercase">Info</button>
+                        </div>
+                    </div>
+                `;
+            });
+
+        c.querySelectorAll('[data-ripple="true"]').forEach(attachRipple);
     }
 
     // --- NAVIGATION & VIEWS ---
@@ -799,7 +1212,7 @@
             tripsView.classList.remove('hidden'); setTimeout(() => tripsView.classList.remove('opacity-0'), 10);
             navHome.classList.replace('text-cyan-400', 'text-slate-500');
             navTrips.classList.replace('text-slate-500', 'text-cyan-400');
-            renderPlanning();
+            toggleTripTab('trips'); // default to trips tab
             controls.autoRotate = false;
         } else {
             tripsView.classList.add('opacity-0'); setTimeout(() => tripsView.classList.add('hidden'), 300);
@@ -810,16 +1223,52 @@
         }
     }
 
+    function toggleTripTab(tab) {
+        const tabTrips = document.getElementById('tab-trips');
+        const tabAlerts = document.getElementById('tab-alerts');
+        const tripsContainer = document.getElementById('trips-container');
+        const alertsContainer = document.getElementById('alerts-container');
+
+        if (!tabTrips || !tabAlerts || !tripsContainer || !alertsContainer) return;
+
+        const activeClass = 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm transition-all';
+        const inactiveClass = 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm transition-all';
+
+        tabTrips.className = (tab === 'trips') ? activeClass : inactiveClass;
+        tabAlerts.className = (tab === 'alerts') ? activeClass : inactiveClass;
+
+        tripsContainer.classList.toggle('hidden', tab !== 'trips');
+        alertsContainer.classList.toggle('hidden', tab !== 'alerts');
+
+        if (tab === 'alerts') {
+            renderAlerts();
+        } else {
+            renderPlanning();
+        }
+    }
+
     function renderPlanning() {
+        console.log('📋 renderPlanning() called');
         const c = document.getElementById('trips-container');
-        const keys = Object.keys(trips);
-        if (!keys.length) {
-            c.innerHTML = '<div class="col-span-full text-center py-20 text-slate-500 font-bold uppercase text-xs tracking-widest">Noch keine Reisen geplant</div>';
+
+        if (!c) {
+            console.error('❌ trips-container element not found!');
             return;
         }
+
+        const keys = Object.keys(trips);
+        console.log(`Found ${keys.length} trips to render:`, keys);
+
+        if (!keys.length) {
+            c.innerHTML = '<div class="col-span-full text-center py-20 text-slate-500 font-bold uppercase text-xs tracking-widest">Noch keine Reisen geplant</div>';
+            console.log('No trips to display');
+            return;
+        }
+
         c.innerHTML = '';
         keys.forEach(k => {
             const t = trips[k];
+            console.log(`Rendering trip ${k}:`, t);
             c.innerHTML += `
                 <div class="glass-card rounded-3xl overflow-hidden cursor-pointer enter-pop" onclick="openDetail('${k}'); flyTo(${t.lat}, ${t.lon})">
                     <img src="${t.img}" class="h-40 w-full object-cover">
@@ -830,6 +1279,7 @@
                 </div>
             `;
         });
+        console.log(`✅ Rendered ${keys.length} trip cards to DOM`);
     }
 
     function openDetail(k) {
@@ -846,7 +1296,7 @@
         document.getElementById('detail-sheet').classList.add('open');
     }
 
-    function closeDetail() { document.getElementById('detail-sheet').classList.remove('open'); }
+    function closeDetail() { document.getElementById('detail-sheet').classList.remove('open'); controls.autoRotate = true; }
     function deleteCurrentTrip() {
         delete trips[currentDetailKey]; persistState();
         renderMarkers(); renderPlanning(); closeDetail(); showToast('Reise entfernt');
@@ -862,30 +1312,136 @@
         modal.classList.add('opacity-0'); setTimeout(() => modal.classList.add('hidden'), 300);
     }
 
+    // --- Microinteractions (Material-ish ripple + toast) ---
+    function attachRipple(el) {
+        if (!el) return;
+        el.addEventListener('click', (e) => {
+            // Skip if disabled
+            if (el.disabled) return;
+            const rect = el.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height);
+            const x = e.clientX - rect.left - size / 2;
+            const y = e.clientY - rect.top - size / 2;
+
+            const ripple = document.createElement('span');
+            ripple.className = 'ripple';
+            ripple.style.width = ripple.style.height = size + 'px';
+            ripple.style.left = x + 'px';
+            ripple.style.top = y + 'px';
+
+            el.appendChild(ripple);
+            ripple.addEventListener('animationend', () => ripple.remove());
+        }, { passive: true });
+    }
+
+    let toastTimer = null;
     function showToast(message) {
         const toast = document.getElementById('toast');
-        document.getElementById('toast-text').innerText = message;
+        const text = document.getElementById('toast-text');
+        if (!toast || !text) return;
+        text.textContent = message;
         toast.classList.add('show');
-        setTimeout(() => toast.classList.remove('show'), 3000);
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+    }
+
+    function checkAndHideSplash() {
+        const elapsed = Date.now() - splashStartTime;
+        const minTimeRemaining = Math.max(0, MIN_SPLASH_TIME - elapsed);
+
+        console.log('🔍 Checking if app is ready:', {
+            threeJSReady,
+            dataReady,
+            appReady,
+            elapsed: `${elapsed}ms`,
+            minTime: `${MIN_SPLASH_TIME}ms`,
+            waiting: `${minTimeRemaining}ms`
+        });
+
+        if (threeJSReady && dataReady && !appReady) {
+            // Wait for minimum splash time before hiding
+            setTimeout(() => {
+                appReady = true;
+                console.log('✅ All components ready - hiding splash screen');
+                hideSplashScreen();
+            }, minTimeRemaining);
+        }
+    }
+
+    function hideSplashScreen() {
+        const splash = document.getElementById('splash-screen');
+        if (splash) {
+            splash.classList.add('fade-out');
+            setTimeout(() => {
+                splash.style.display = 'none';
+                console.log('🎉 Splash screen hidden - App ready!');
+            }, 800);
+            setTimeout(() => {
+                console.log('🎉 Earth starting to rotate!');
+                controls.autoRotate = true;
+            }, 500);
+        }
+
+
     }
 
     function flyTo(lat, lon) {
+        if (!camera || !controls) return;
+        controls.autoRotate = false;
         const targetPos = latLonToPos(lat, lon, camera.position.length());
-        new TWEEN.Tween(camera.position).to({ x: targetPos.x, y: targetPos.y, z: targetPos.z }, 1500).easing(TWEEN.Easing.Cubic.InOut).onUpdate(() => camera.lookAt(0, 0, 0)).start();
+        new TWEEN.Tween(camera.position)
+            .to({ x: targetPos.x, y: targetPos.y, z: targetPos.z }, 1500)
+            .easing(TWEEN.Easing.Cubic.InOut)
+            .onUpdate(() => camera.lookAt(0, 0, 0))
+            .start();
     }
 
     // --- INIT ---
-    window.onload = () => {
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('🚀 DOM Content Loaded - App starting...');
+        splashStartTime = Date.now(); // Reset start time to DOMContentLoaded
+
         const bar = document.getElementById('splash-bar');
-        setTimeout(() => bar.style.width = "40%", 200);
-        setTimeout(() => bar.style.width = "100%", 1000);
+
+        // Animate loading bar
         setTimeout(() => {
-            document.getElementById('splash-screen').classList.add('fade-out');
+            if (bar) bar.style.width = "40%";
+        }, 200);
+
+        setTimeout(() => {
+            if (bar) bar.style.width = "75%";
+        }, 600);
+
+        setTimeout(() => {
+            if (bar) bar.style.width = "100%";
+        }, 1000);
+
+        // Initialize Three.js first (critical for rendering)
+        setTimeout(() => {
+            console.log('🎨 Initializing Three.js...');
             initThreeJS();
-            renderMarkers();
-            initWebChannel();
-        }, 1800);
-    };
+
+            // After Three.js is ready, initialize data loading
+            setTimeout(() => {
+                console.log('📊 Starting data initialization...');
+
+                // Load data for web version (localStorage) before WebChannel init
+                // Qt version will reload from backend after WebChannel connects
+                if (typeof qt === 'undefined') {
+                    console.log('🌐 Web version detected - loading from localStorage');
+                    loadData();
+                    // For web version, render immediately after loading
+                    renderMarkers();
+                    renderAllFlightPaths();
+                    renderAlerts();
+                } else {
+                    console.log('🖥️ Desktop version detected - waiting for WebChannel');
+                }
+
+                initWebChannel();
+            }, 200);
+        }, 1200);
+    });
 
     // Raycaster für Globe-Picking
     const raycaster = new THREE.Raycaster();

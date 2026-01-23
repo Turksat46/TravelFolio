@@ -25,6 +25,9 @@ class SearchWorker(QThread):
 
     def run(self):
         try:
+            print(f"SearchWorker started: {self.origin} -> {self.destination} on {self.date}")
+            print(f"Passenger data: {self.pass_data}")
+
             passengers = Passengers(
                 adults=int(self.pass_data.get('adults', 1)),
                 children=int(self.pass_data.get('children', 0)),
@@ -65,21 +68,104 @@ class SearchWorker(QThread):
                 'destination': self.destination,
                 'flights': flights_list
             })
+            print(f"Search completed successfully: {len(flights_list)} flights found")
         except Exception as e:
-            self.finished.emit({'success': False, 'error': str(e)})
+            print(f"Search error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            self.finished.emit({
+                'success': False,
+                'error': str(e),
+                'origin': self.origin,
+                'destination': self.destination
+            })
 
 
 # --- BRIDGE ---
 # Die Schnittstelle, die vom HTML aus aufgerufen werden kann
 class Bridge(QObject):
     resultsReady = Signal(dict)
+    dataLoaded = Signal(dict)  # Signal to send loaded data to JavaScript
+
+    def __init__(self):
+        super().__init__()
+        self.data_dir = os.path.join(os.path.expanduser("~"), ".travelfolio")
+        self.trips_file = os.path.join(self.data_dir, "trips.json")
+        self.alerts_file = os.path.join(self.data_dir, "alerts.json")
+
+        # Create data directory if it doesn't exist
+        os.makedirs(self.data_dir, exist_ok=True)
+        print(f"Data directory: {self.data_dir}")
 
     @Slot(str, str, str, dict)
     def search_flights(self, origin, destination, date, pass_data):
+        print(f"Bridge.search_flights called: {origin} -> {destination}, date: {date}")
+        print(f"Passenger data type: {type(pass_data)}, value: {pass_data}")
         # Wir erstellen einen neuen Thread für jede Suche
         self.worker = SearchWorker(origin.upper(), destination.upper(), date, pass_data)
         self.worker.finished.connect(lambda data: self.resultsReady.emit(data))
         self.worker.start()
+        print("Worker thread started")
+
+    @Slot(str)
+    def save_data(self, data_json):
+        """Save both trips and alerts data to local JSON files"""
+        try:
+            import json
+            data = json.loads(data_json)
+
+            # Save trips
+            if 'trips' in data:
+                with open(self.trips_file, 'w', encoding='utf-8') as f:
+                    json.dump(data['trips'], f, ensure_ascii=False, indent=2)
+                print(f"Trips saved: {len(data['trips'])} trips")
+
+            # Save alerts
+            if 'alerts' in data:
+                with open(self.alerts_file, 'w', encoding='utf-8') as f:
+                    json.dump(data['alerts'], f, ensure_ascii=False, indent=2)
+                print(f"Alerts saved: {len(data['alerts'])} alerts")
+
+            return True
+        except Exception as e:
+            print(f"Error saving data: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    @Slot()
+    def load_data(self):
+        """Load data from local JSON files and emit via signal"""
+        try:
+            import json
+            trips = {}
+            alerts = []
+
+            # Load trips
+            if os.path.exists(self.trips_file):
+                with open(self.trips_file, 'r', encoding='utf-8') as f:
+                    trips = json.load(f)
+                print(f"Trips loaded: {len(trips)} trips")
+
+            # Load alerts
+            if os.path.exists(self.alerts_file):
+                with open(self.alerts_file, 'r', encoding='utf-8') as f:
+                    alerts = json.load(f)
+                print(f"Alerts loaded: {len(alerts)} alerts")
+
+            # Emit data via signal
+            self.dataLoaded.emit({
+                'trips': trips,
+                'alerts': alerts
+            })
+            print("Data emitted via dataLoaded signal")
+
+        except Exception as e:
+            print(f"Error loading data: {e}")
+            import traceback
+            traceback.print_exc()
+            # Emit empty data on error
+            self.dataLoaded.emit({'trips': {}, 'alerts': []})
 
 
 class TravelFolioApp(QMainWindow):
@@ -104,7 +190,7 @@ class TravelFolioApp(QMainWindow):
         self.browser.page().setWebChannel(self.channel)
 
         # Pfad zur HTML Datei
-        file_path = os.path.abspath("altercode/travelfolio_desktop.html")
+        file_path = os.path.abspath("templates/travelfolio.html")
         self.browser.load(QUrl.fromLocalFile(file_path))
 
         self.setCentralWidget(self.browser)
@@ -114,6 +200,7 @@ if __name__ == "__main__":
     # Fix für High-DPI Displays (wird in Qt6 automatisch gehandhabt,
     # aber Umgebungsvariablen helfen bei der Konsistenz)
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
+    os.environ["QTWEBENGINE_REMOTE_DEBUGGING"] = "9222"
 
     app = QApplication(sys.argv)
     window = TravelFolioApp()
