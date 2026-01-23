@@ -104,7 +104,7 @@ class TravelFolioApp(QMainWindow):
         self.browser.page().setWebChannel(self.channel)
 
         # Pfad zur HTML Datei
-        file_path = os.path.abspath("./templates/travelfolio_desktop.html")
+        file_path = os.path.abspath("altercode/travelfolio_desktop.html")
         self.browser.load(QUrl.fromLocalFile(file_path))
 
         self.setCentralWidget(self.browser)
