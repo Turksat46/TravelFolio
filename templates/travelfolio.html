@@ -3,8 +3,9 @@
 <head>
     <meta charset="utf-8">
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
-    <title>TravelFolio</title>
-    <link rel="icon" type="image/x-icon" href="/static/logo.png">
+    <title>TravelFolio - Universal Edition</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="../static/logo.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
 
@@ -16,19 +17,20 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
 
     <!-- Qt WebChannel - Wird im Browser ignoriert, in Qt geladen -->
-    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <script src="qrc:///qtwebchannel/qwebchannel.js" onerror="console.warn('Qt WebChannel nicht verfügbar - normal im Browser')"></script>
 
-    <!-- Externe Firebase Konfiguration laden -->
-    <script src="{{ url_for('static', filename='firebase-config.js') }}"></script>
+    <!-- Externe Firebase Konfiguration -->
+    <script src="../static/firebase-config.js"></script>
+
 
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
-        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+        import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, query, deleteDoc } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
 
         // Globaler Zugriff für das restliche Skript
-        window.firebaseModules = { initializeApp, getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, signInWithCustomToken, signInAnonymously, getFirestore, doc, setDoc, getDoc, collection, onSnapshot, query, deleteDoc };
+        window.firebaseModules = { initializeApp, getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut, signInWithCustomToken, signInAnonymously, getFirestore, doc, setDoc, getDoc, collection, onSnapshot, query, deleteDoc };
     </script>
 
     <style>
@@ -86,35 +88,13 @@
             100% { transform: translate3d(1.5%, 1.2%, 0) scale(1.06); }
         }
 
-        #app-container {
-            width: 100vw;
-            height: 100vh;
-            position: relative;
-            background-color: #0f172a;
-            overflow: hidden;
-        }
-
-        #canvas-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 0;
-            background: radial-gradient(circle at center, #1e293b 0%, #020617 100%);
-        }
-
+        #app-container { width: 100vw; height: 100vh; position: relative; background-color: #0f172a; overflow: hidden; }
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; background: radial-gradient(circle at center, #1e293b 0%, #020617 100%); }
         .ui-layer { position: absolute; z-index: 10; pointer-events: none; width: 100%; height: 100%; }
         .content-limit { max-width: 1200px; margin: 0 auto; width: 100%; height: 100%; position: relative; }
         .interactive { pointer-events: auto; }
 
-        .glass {
-            background: var(--surface);
-            backdrop-filter: blur(20px);
-            border-top: 1px solid rgba(255, 255, 255, 0.08);
-            border: 1px solid var(--stroke);
-        }
-
+        .glass { background: var(--surface); backdrop-filter: blur(20px); border-top: 1px solid rgba(255, 255, 255, 0.08); border: 1px solid var(--stroke); }
         .glass-card {
             background: var(--surface-2);
             backdrop-filter: blur(14px);
@@ -124,75 +104,31 @@
             will-change: transform;
         }
 
-        .glass-card:hover {
-            transform: translateY(-3px) scale(1.01);
-            background: rgba(30, 41, 59, 0.68);
-            border-color: rgba(34,211,238,0.40);
-            box-shadow: var(--shadow-2);
-        }
-
+        .glass-card:hover { transform: translateY(-3px) scale(1.01); background: rgba(30, 41, 59, 0.68); border-color: rgba(34,211,238,0.40); box-shadow: var(--shadow-2); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
         #detail-sheet {
-            position: absolute;
-            right: 24px;
-            top: 100px;
-            bottom: 100px;
-            width: 420px;
-            z-index: 50;
-            background: rgba(15, 23, 42, 0.92);
-            backdrop-filter: blur(22px);
-            border-radius: 26px;
-            border: 1px solid var(--stroke);
-            transform: translateX(125%) scale(0.98);
-            opacity: 0;
-            transition: transform 650ms var(--easing-expressive), opacity 450ms var(--easing-standard);
-            box-shadow: -20px 0 60px rgba(0,0,0,0.55);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
+            position: absolute; right: 24px; top: 100px; bottom: 100px; width: 420px; z-index: 50;
+            background: rgba(15, 23, 42, 0.92); backdrop-filter: blur(22px); border-radius: 26px; border: 1px solid var(--stroke);
+            transform: translateX(125%) scale(0.98); opacity: 0; transition: transform 650ms var(--easing-expressive), opacity 450ms var(--easing-standard);
+            box-shadow: -20px 0 60px rgba(0,0,0,0.55); display: flex; flex-direction: column; overflow: hidden;
         }
 
-        #detail-sheet.open {
-            transform: translateX(0) scale(1);
-            opacity: 1;
-        }
-
-        .modal-bg {
-            background: rgba(0,0,0,0.78);
-            backdrop-filter: blur(10px);
-        }
+        #detail-sheet.open { transform: translateX(0) scale(1); opacity: 1; }
+        .modal-bg { background: rgba(0,0,0,0.78); backdrop-filter: blur(10px); }
 
         #splash-screen {
-            position: fixed;
-            inset: 0;
-            z-index: 9999;
-            background: var(--bg);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
+            position: fixed; inset: 0; z-index: 9999; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center;
             transition: opacity 800ms var(--easing-expressive), visibility 800ms;
         }
 
-        #splash-screen.fade-out {
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-        }
+        #splash-screen.fade-out { opacity: 0; visibility: hidden; pointer-events: none; }
 
         .splash-logo {
-            width: 90px;
-            height: 90px;
-            border-radius: 24px;
-            background: linear-gradient(135deg, #22d3ee, #3b82f6);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 20px 40px rgba(34, 211, 238, 0.3);
-            margin-bottom: 2rem;
-            animation: splashPulse 2.5s infinite var(--easing-expressive);
+            width: 90px; height: 90px; border-radius: 24px; background: linear-gradient(135deg, #22d3ee, #3b82f6);
+            display: flex; align-items: center; justify-content: center; box-shadow: 0 20px 40px rgba(34, 211, 238, 0.3);
+            margin-bottom: 2rem; animation: splashPulse 2.5s infinite var(--easing-expressive);
         }
 
         @keyframes splashPulse {
@@ -202,119 +138,42 @@
         }
 
         .search-input {
-            width: 100%;
-            background: linear-gradient(180deg, rgba(30,41,59,0.9), rgba(30,41,59,0.72));
-            padding: 0.95rem 1rem;
-            border-radius: 1rem;
-            border: 1px solid rgba(148,163,184,0.22);
-            color: white;
-            outline: none;
+            width: 100%; background: linear-gradient(180deg, rgba(30,41,59,0.9), rgba(30,41,59,0.72)); padding: 0.95rem 1rem;
+            border-radius: 1rem; border: 1px solid rgba(148,163,184,0.22); color: white; outline: none;
             transition: border-color 220ms var(--easing-standard), box-shadow 260ms var(--easing-expressive), transform 220ms var(--easing-standard), background 260ms var(--easing-expressive);
             font-size: 0.92rem;
         }
 
-        .search-input:hover {
-            border-color: rgba(148,163,184,0.34);
-            transform: translateY(-1px);
-        }
-
-        .search-input:focus {
-            border-color: rgba(34, 211, 238, 0.65);
-            box-shadow: var(--glow);
-        }
+        .search-input:focus { border-color: rgba(34, 211, 238, 0.65); box-shadow: var(--glow); }
 
         .passenger-counter {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background: rgba(2,6,23,0.55);
-            padding: 0.6rem 0.9rem;
-            border-radius: 1rem;
-            border: 1px solid rgba(148,163,184,0.20);
-            transition: border-color 220ms var(--easing-standard), transform 220ms var(--easing-standard), background 260ms var(--easing-expressive);
+            display: flex; align-items: center; justify-content: space-between; background: rgba(2,6,23,0.55);
+            padding: 0.6rem 0.9rem; border-radius: 1rem; border: 1px solid rgba(148,163,184,0.20);
         }
 
         .counter-btn {
-            width: 30px;
-            height: 30px;
-            border-radius: 999px;
-            background: rgba(30,41,59,0.85);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: transform 160ms var(--easing-standard), background 220ms var(--easing-expressive);
-            user-select: none;
+            width: 30px; height: 30px; border-radius: 999px; background: rgba(30,41,59,0.85);
+            display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 160ms var(--easing-standard); user-select: none;
         }
 
-        #btn-search-trigger {
-            position: relative;
-            overflow: hidden;
-            border-radius: 1.25rem;
-            box-shadow: 0 14px 50px rgba(34,211,238,0.20);
-            transition: all 240ms var(--easing-expressive);
-        }
-
-        .ripple {
-            position: absolute;
-            border-radius: 999px;
-            transform: scale(0);
-            animation: ripple 650ms var(--easing-expressive);
-            background: rgba(255,255,255,0.28);
-            pointer-events: none;
-        }
-
+        #btn-search-trigger { position: relative; overflow: hidden; border-radius: 1.25rem; box-shadow: 0 14px 50px rgba(34,211,238,0.20); transition: all 240ms var(--easing-expressive); }
+        .ripple { position: absolute; border-radius: 999px; transform: scale(0); animation: ripple 650ms var(--easing-expressive); background: rgba(255,255,255,0.28); pointer-events: none; }
         @keyframes ripple { to { transform: scale(4.2); opacity: 0; } }
 
-        .flight-result-card {
-            background: rgba(30, 41, 59, 0.55);
-            border: 1px solid rgba(148,163,184,0.20);
-            padding: 1.25rem;
-            border-radius: 1.5rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            transition: all 260ms var(--easing-expressive);
-        }
-
+        .flight-result-card { background: rgba(30, 41, 59, 0.55); border: 1px solid rgba(148,163,184,0.20); padding: 1.25rem; border-radius: 1.5rem; display: flex; justify-content: space-between; align-items: center; transition: all 260ms var(--easing-expressive); }
         .enter-pop { animation: enterPop 520ms var(--easing-expressive) both; }
-        @keyframes enterPop {
-            0% { transform: translateY(14px) scale(0.98); opacity: 0; }
-            100% { transform: translateY(0) scale(1); opacity: 1; }
-        }
+        @keyframes enterPop { 0% { transform: translateY(14px) scale(0.98); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
 
-        #toast {
-            position: fixed;
-            left: 50%;
-            bottom: 22px;
-            transform: translateX(-50%) translateY(20px);
-            opacity: 0;
-            z-index: 80;
-            transition: all 420ms var(--easing-expressive);
-        }
-
+        #toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(20px); opacity: 0; z-index: 80; transition: all 420ms var(--easing-expressive); }
         #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-        .loading-ring {
-            border: 3px solid rgba(255,255,255,0.12);
-            border-top: 3px solid var(--primary);
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            animation: spin 1s linear infinite;
-        }
+        .loading-ring { border: 3px solid rgba(255,255,255,0.12); border-top: 3px solid var(--primary); border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         .loading-bar-container { width: 200px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-top: 2rem; overflow: hidden; }
         .loading-bar-fill { height: 100%; width: 0%; background: var(--primary); transition: width 0.5s ease; }
 
-        .auth-avatar {
-            width: 36px;
-            height: 36px;
-            border-radius: 999px;
-            border: 2px solid var(--primary);
-            object-fit: cover;
-        }
+        .auth-avatar { width: 36px; height: 36px; border-radius: 999px; border: 2px solid var(--primary); object-fit: cover; }
     </style>
 </head>
 <body>
@@ -322,7 +181,7 @@
 <div id="app-container">
     <div id="splash-screen">
         <div class="splash-logo">
-            <img src="../static/logo.png" onerror="this.src='https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/plane.svg'" alt="Logo" class="w-16 h-16 object-contain">
+            <img src="../static/logo.png" alt="Logo" class="w-16 h-16 object-contain">
         </div>
         <div class="text-center">
             <h1 class="text-3xl font-black text-white uppercase mb-1 tracking-tighter">TravelFolio 3D</h1>
@@ -331,6 +190,7 @@
         <div class="loading-bar-container">
             <div id="splash-bar" class="loading-bar-fill"></div>
         </div>
+        <div id="auth-status-splash" class="mt-8 text-slate-500 text-[10px] font-black uppercase tracking-widest hidden">Synchronisiere Cloud...</div>
     </div>
 
     <div id="canvas-container"></div>
@@ -347,15 +207,16 @@
         <div class="content-limit flex justify-between items-center">
             <div class="flex items-center gap-4 pointer-events-auto cursor-pointer" onclick="switchView('home')">
                 <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center p-2">
-                    <img src="../static/logo.png" onerror="this.src='https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/plane.svg'" alt="Logo" class="w-full h-full object-contain">
+                    <img src="../static/logo.png" alt="Logo" class="w-full h-full object-contain">
                 </div>
                 <span class="text-2xl font-black text-white uppercase tracking-tighter">TravelFolio</span>
             </div>
+
             <div class="flex items-center gap-3 pointer-events-auto">
                 <div id="user-profile" class="hidden flex items-center gap-3 glass rounded-full pl-2 pr-4 py-1.5 border border-white/10">
                     <img id="user-photo" src="" class="auth-avatar" alt="User">
                     <div class="flex flex-col">
-                        <span id="user-name" class="text-[10px] font-black text-white leading-none">User Name</span>
+                        <span id="user-name" class="text-[10px] font-black text-white leading-none">Traveler</span>
                         <button onclick="handleLogout()" class="text-[8px] font-bold text-cyan-400 uppercase tracking-widest text-left">Logout</button>
                     </div>
                 </div>
@@ -465,166 +326,20 @@
     <!-- Navbar -->
     <div class="absolute bottom-10 left-0 right-0 z-40 flex justify-center pointer-events-none">
         <div class="glass rounded-full px-8 py-4 flex items-center gap-10 pointer-events-auto shadow-2xl border border-white/10">
-            <button onclick="switchView('home')" id="nav-home" class="flex flex-col items-center text-cyan-400 transition hover:scale-110"><span class="material-symbols-outlined text-3xl">public</span><span class="text-[8px] font-black uppercase">Home</span></button>
+            <button onclick="switchView('home')" id="nav-home" class="flex flex-col items-center text-cyan-400 transition hover:scale-110 no-ripple"><span class="material-symbols-outlined text-3xl">public</span></button>
             <button onclick="showAddTripModal()" class="w-16 h-16 rounded-full bg-gradient-to-r from-cyan-400 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/40 transform hover:scale-110 active:scale-95 transition-all"><span class="material-symbols-outlined text-4xl">add</span></button>
-            <button onclick="switchView('trips')" id="nav-trips" class="flex flex-col items-center text-slate-500 transition hover:scale-110"><span class="material-symbols-outlined text-3xl">event_note</span><span class="text-[8px] font-black uppercase">Planung</span></button>
+            <button onclick="switchView('trips')" id="nav-trips" class="flex flex-col items-center text-slate-500 transition hover:scale-110 no-ripple"><span class="material-symbols-outlined text-3xl">event_note</span></button>
         </div>
     </div>
 </div>
 
 <script>
-    // --- FIREBASE CONFIG & AUTH ---
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'travelfolio-3d-001';
-    let firebaseApp, auth, db, currentUser = null;
-
-    async function initFirebase() {
-        if (!window.firebaseModules) return;
-        const { initializeApp, getAuth, getFirestore, signInWithCustomToken, signInAnonymously, onAuthStateChanged } = window.firebaseModules;
-
-        try {
-            // Prüfung: Kommt die Config als String vom Backend oder als Objekt aus der externen JS-Datei?
-            let firebaseConfig;
-            if (typeof __firebase_config === 'undefined') {
-                console.error('Firebase Konfiguration wurde nicht geladen!');
-                loadData();
-                return;
-            }
-
-            if (typeof __firebase_config === 'string') {
-                firebaseConfig = JSON.parse(__firebase_config);
-            } else {
-                firebaseConfig = __firebase_config;
-            }
-
-            firebaseApp = initializeApp(firebaseConfig);
-            auth = getAuth(firebaseApp);
-            db = getFirestore(firebaseApp);
-
-            const initAuth = async () => {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                }
-            };
-            await initAuth();
-
-            onAuthStateChanged(auth, (user) => {
-                currentUser = user;
-                updateAuthUI(user);
-                if (user) {
-                    syncWithFirestore();
-                } else {
-                    loadData();
-                }
-            });
-        } catch (e) {
-            console.error('Firebase Init Error:', e);
-            loadData();
-        }
-    }
-
-    async function handleLogin() {
-        const { signInWithPopup, GoogleAuthProvider } = window.firebaseModules;
-        const provider = new GoogleAuthProvider();
-        try {
-            const result = await signInWithPopup(auth, provider);
-            const idToken = await result.user.getIdToken();
-
-            // Backend-Session synchronisieren
-            const response = await fetch('/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ idToken: idToken })
-            });
-
-            if (response.ok) {
-                showToast('Erfolgreich eingeloggt');
-            }
-        } catch (error) {
-            console.error('Login Error:', error);
-            showToast('Login fehlgeschlagen');
-        }
-    }
-
-    async function handleLogout() {
-        const { signOut } = window.firebaseModules;
-        try {
-            await signOut(auth);
-            await fetch('/logout', { method: 'POST' });
-            showToast('Ausgeloggt');
-            window.location.reload();
-        } catch (error) {
-            console.error('Logout Error:', error);
-        }
-    }
-
-    function updateAuthUI(user) {
-        const loginBtn = document.getElementById('login-btn');
-        const userProfile = document.getElementById('user-profile');
-        const userPhoto = document.getElementById('user-photo');
-        const userName = document.getElementById('user-name');
-
-        if (user) {
-            if (loginBtn) loginBtn.classList.add('hidden');
-            if (userProfile) userProfile.classList.remove('hidden');
-            if (userPhoto) userPhoto.src = user.photoURL || 'https://www.gravatar.com/avatar/?d=mp';
-            if (userName) userName.innerText = user.displayName || 'Traveler';
-        } else {
-            if (loginBtn) loginBtn.classList.remove('hidden');
-            if (userProfile) userProfile.classList.add('hidden');
-        }
-    }
-
-    // --- DATA PERSISTENCE (FIRESTORE) ---
-    async function syncWithFirestore() {
-        if (!currentUser || !db) return;
-        const { collection, onSnapshot } = window.firebaseModules;
-
-        const tripsPath = `/artifacts/${appId}/users/${currentUser.uid}/trips`;
-        const tripsRef = collection(db, ...tripsPath.split('/').filter(p => p));
-        onSnapshot(tripsRef, (snapshot) => {
-            const remoteTrips = {};
-            snapshot.forEach(doc => { remoteTrips[doc.id] = doc.data(); });
-            trips = remoteTrips;
-            renderMarkers();
-            renderAllFlightPaths();
-            renderPlanning();
-            dataReady = true;
-            checkAndHideSplash();
-        });
-
-        const alertsPath = `/artifacts/${appId}/users/${currentUser.uid}/alerts`;
-        const alertsRef = collection(db, ...alertsPath.split('/').filter(p => p));
-        onSnapshot(alertsRef, (snapshot) => {
-            const remoteAlerts = [];
-            snapshot.forEach(doc => { remoteAlerts.push({ ...doc.data(), id: doc.id }); });
-            priceAlerts = remoteAlerts;
-            renderAlerts();
-        });
-    }
-
-    async function saveTripToFirestore(tripId, tripData) {
-        if (!currentUser || !db) return;
-        const { doc, setDoc } = window.firebaseModules;
-        const tripDoc = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'trips', tripId);
-        await setDoc(tripDoc, tripData);
-    }
-
-    async function deleteTripFromFirestore(tripId) {
-        if (!currentUser || !db) return;
-        const { doc, deleteDoc } = window.firebaseModules;
-        const tripDoc = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'trips', tripId);
-        await deleteDoc(tripDoc);
-    }
-
     // --- STATE & CONFIG ---
-    const cityDatabase = {
-        "FRA": {lat: 50.03, lon: 8.57}, "LHR": {lat: 51.47, lon: -0.45}, "TYO": {lat: 35.67, lon: 139.65}, "JFK": {lat: 40.64, lon: -73.77},
-        "BER": {lat: 52.36, lon: 13.50}, "CDG": {lat: 49.00, lon: 2.55}, "DXB": {lat: 25.25, lon: 55.36}
-    };
-
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'travelfolio-3d-001';
     let trips = {};
     let priceAlerts = [];
     let passengerCounts = { adults: 1, children: 0, infants: 0 };
+    let currentUser = null;
     let currentDetailKey = null;
     let qtChannelReady = false;
     let lastSearchContext = null;
@@ -634,46 +349,246 @@
     let splashStartTime = Date.now();
     const MIN_SPLASH_TIME = 2500;
 
-    function persistState() {
-        if (currentUser && db) return;
-        if (qtChannelReady && window.backend?.save_data) {
-            const data = { trips, alerts: priceAlerts };
-            window.backend.save_data(JSON.stringify(data));
+    const cityDatabase = {
+        "FRA": {lat: 50.03, lon: 8.57}, "LHR": {lat: 51.47, lon: -0.45}, "TYO": {lat: 35.67, lon: 139.65}, "JFK": {lat: 40.64, lon: -73.77},
+        "BER": {lat: 52.36, lon: 13.50}, "CDG": {lat: 49.00, lon: 2.55}, "DXB": {lat: 25.25, lon: 55.36}
+    };
+
+    // --- UNIVERSAL BRIDGE (QT / FLASK) ---
+    function initWebChannel() {
+        if (typeof qt === 'undefined' || typeof QWebChannel === 'undefined') {
+            console.log("Web-Modus: Kein Qt WebChannel erkannt.");
+            return;
+        }
+        try {
+            new QWebChannel(qt.webChannelTransport, (channel) => {
+                window.backend = channel.objects.backend;
+                qtChannelReady = true;
+                console.info('Qt WebChannel verbunden');
+
+                // Signale vom Backend verbinden
+                if (window.backend.resultsReady) {
+                    window.backend.resultsReady.connect((data) => handleSearchResults(data));
+                }
+                if (window.backend.dataLoaded) {
+                    window.backend.dataLoaded.connect((data) => {
+                        trips = data.trips || {};
+                        priceAlerts = data.alerts || [];
+                        dataReady = true;
+                        renderAll();
+                        checkSplash();
+                    });
+                }
+
+                // Initialen Daten-Load triggern
+                loadData();
+            });
+        } catch (e) {
+            console.warn('Qt WebChannel Initialisierung fehlgeschlagen', e);
+        }
+    }
+
+    // --- FIREBASE AUTH & BACKEND SYNC ---
+    async function checkSavedSession() {
+        /**
+         * Prüft ob eine gespeicherte Session im Qt Backend existiert
+         */
+        if (!qtChannelReady || !window.backend) {
+            return null;
+        }
+
+        try {
+            const savedUid = await window.backend.get_saved_uid();
+            if (savedUid && savedUid.length > 0) {
+                console.log('🔐 Gespeicherte Session gefunden für UID:', savedUid);
+                return savedUid;
+            }
+            console.log('🔓 Keine gespeicherte Session gefunden');
+            return null;
+        } catch (e) {
+            console.warn('⚠️ Session-Check fehlgeschlagen:', e);
+            return null;
+        }
+    }
+
+    async function initFirebase() {
+        if (!window.firebaseModules) {
+            console.warn('Firebase Module nicht geladen');
+            return;
+        }
+
+        // Warte bis zu 3 Sekunden auf die Firebase-Config
+        let retries = 0;
+        while (typeof window.__firebase_config === 'undefined' && retries < 30) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            retries++;
+        }
+
+        const { initializeApp, getAuth, signInWithCustomToken, onAuthStateChanged } = window.firebaseModules;
+
+        try {
+            if (typeof window.__firebase_config === 'undefined' || !window.__firebase_config) {
+                console.warn('⚠️ Firebase Konfiguration fehlt - verwende lokale Speicherung.');
+                loadData();
+                return;
+            }
+
+            const firebaseConfig = typeof window.__firebase_config === 'string'
+                ? JSON.parse(window.__firebase_config)
+                : window.__firebase_config;
+
+            console.log('🔥 Initialisiere Firebase...');
+            const app = initializeApp(firebaseConfig);
+            const auth = getAuth(app);
+            window._auth = auth;
+            console.log('✅ Firebase erfolgreich initialisiert!');
+
+
+            // Prüfe gespeicherte Session im Qt Backend beim Start
+            const savedUid = await checkSavedSession();
+
+            onAuthStateChanged(auth, async (user) => {
+                currentUser = user;
+
+                if (user) {
+                    console.log('👤 User eingeloggt via Firebase Auth:', user.uid);
+                    updateAuthUI(user);
+                    // Informiere Qt Backend über die User-ID
+                    if (qtChannelReady && window.backend) {
+                        window.backend.set_user_auth(user.uid);
+                    }
+                    await fetchBackendData();
+                } else {
+                    console.log('👤 Kein User eingeloggt via Firebase Auth');
+                    // Falls gespeicherte Session existiert, simuliere User-Objekt für UI
+                    if (savedUid) {
+                        console.log('👤 Aber gespeicherte Session vorhanden - simuliere Login-Status');
+                        // Erstelle ein minimales User-Objekt für die UI
+                        const mockUser = {
+                            uid: savedUid,
+                            displayName: 'Gespeicherter User',
+                            photoURL: null
+                        };
+                        currentUser = mockUser;
+                        updateAuthUI(mockUser);
+                        loadData();
+                    } else {
+                        updateAuthUI(null);
+                        loadData();
+                    }
+                }
+            });
+        } catch (e) {
+            console.error('❌ Firebase Init Error:', e);
+            loadData();
+        }
+    }
+
+    async function handleLogin() {
+        console.log('🔐 handleLogin() aufgerufen');
+        console.log('🔐 window._auth:', window._auth);
+        console.log('🔐 window.firebaseModules:', window.firebaseModules);
+
+        if (!window._auth) {
+            console.error('❌ Firebase Auth nicht initialisiert!');
+            showToast('Firebase nicht bereit');
+            return;
+        }
+
+        const { signInWithPopup, GoogleAuthProvider } = window.firebaseModules;
+        const provider = new GoogleAuthProvider();
+
+        console.log('🔐 Starte Google Login Popup...');
+
+        try {
+            const result = await signInWithPopup(window._auth, provider);
+            console.log('✅ Login erfolgreich:', result.user.uid);
+
+            // Session im Qt Backend speichern
+            if (qtChannelReady && window.backend) {
+                window.backend.set_user_auth(result.user.uid);
+                console.log('💾 Session im Qt Backend gespeichert');
+            }
+
+            showToast('Eingeloggt - Session gespeichert');
+        } catch (error) {
+            console.error('❌ Login Error:', error);
+            showToast('Login fehlgeschlagen: ' + error.message);
+        }
+    }
+
+    async function handleLogout() {
+        if (!window._auth) return;
+        const { signOut } = window.firebaseModules;
+        try {
+            await signOut(window._auth);
+
+            // Session im Qt Backend löschen
+            if (qtChannelReady && window.backend) {
+                window.backend.logout_user();
+                console.log('🗑️ Session im Qt Backend gelöscht');
+            }
+
+            window.location.reload();
+        } catch (error) {
+            console.error('Logout Error:', error);
+        }
+    }
+
+    function updateAuthUI(user) {
+        const lp = document.getElementById('login-btn');
+        const up = document.getElementById('user-profile');
+        if (user) {
+            if(lp) lp.classList.add('hidden');
+            if(up) up.classList.remove('hidden');
+            document.getElementById('user-photo').src = user.photoURL || 'https://www.gravatar.com/avatar/?d=mp';
+            document.getElementById('user-name').innerText = user.displayName || 'Traveler';
         } else {
-            localStorage.setItem('tf_trips', JSON.stringify(trips));
-            localStorage.setItem('tf_alerts', JSON.stringify(priceAlerts));
+            if(lp) lp.classList.remove('hidden');
+            if(up) up.classList.add('hidden');
+        }
+    }
+
+    // --- DATA HANDLING ---
+    async function fetchBackendData() {
+        // Im Qt-Modus verwenden wir direkt loadData (keine Flask API nötig)
+        if (qtChannelReady) {
+            loadData();
+            return;
+        }
+
+        // Im Web-Modus (mit Flask) über API laden
+        try {
+            const res = await fetch('/api/data');
+            const data = await res.json();
+            trips = data.trips || {};
+            priceAlerts = data.alerts || [];
+            dataReady = true;
+            renderAll();
+            checkSplash();
+        } catch (e) {
+            console.warn('⚠️ API-Aufruf fehlgeschlagen, verwende loadData:', e);
+            loadData();
         }
     }
 
     function loadData() {
-        if (qtChannelReady && window.backend?.load_data) {
+        if (qtChannelReady && window.backend) {
             window.backend.load_data();
-            return true;
         } else {
             trips = JSON.parse(localStorage.getItem('tf_trips')) || {};
             priceAlerts = JSON.parse(localStorage.getItem('tf_alerts')) || [];
             dataReady = true;
-            checkAndHideSplash();
-            renderMarkers();
-            renderAllFlightPaths();
-            renderAlerts();
-            renderPlanning();
-            return true;
+            renderAll();
+            checkSplash();
         }
     }
 
-    function handleDataLoaded(data) {
-        if (!data) { dataReady = true; checkAndHideSplash(); return; }
-        trips = data.trips || {};
-        priceAlerts = data.alerts || [];
-        setTimeout(() => {
-            renderMarkers();
-            renderAllFlightPaths();
-            renderAlerts();
-            renderPlanning();
-            dataReady = true;
-            checkAndHideSplash();
-        }, 100);
+    function renderAll() {
+        renderMarkers();
+        renderAllFlightPaths();
+        renderPlanning();
+        renderAlerts();
     }
 
     // --- THREE.JS ENGINE ---
@@ -685,18 +600,17 @@
         if (!container) return;
 
         scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+        camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.z = 15;
 
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
         container.appendChild(renderer.domElement);
 
         controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.autoRotate = false;
-        controls.autoRotateSpeed = 0.5;
         controls.minDistance = 7;
         controls.maxDistance = 30;
 
@@ -704,20 +618,22 @@
         scene.add(globeGroup);
         const texLoad = new THREE.TextureLoader();
 
+        // Sterne
         const starGeo = new THREE.BufferGeometry();
-        const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05, transparent: true, opacity: 0.8 });
         const starVerts = [];
         for(let i=0; i<5000; i++) starVerts.push((Math.random()-0.5)*150, (Math.random()-0.5)*150, (Math.random()-0.5)*150);
         starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts, 3));
-        stars = new THREE.Points(starGeo, starMat);
+        stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.05, transparent: true, opacity: 0.8 }));
         scene.add(stars);
 
+        // Atmosphäre
         atmosphere = new THREE.Mesh(
             new THREE.SphereGeometry(5.2, 64, 64),
             new THREE.MeshPhongMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.1, side: THREE.BackSide, blending: THREE.AdditiveBlending })
         );
         scene.add(atmosphere);
 
+        // Erde
         earthMaterial = new THREE.MeshStandardMaterial({
             map: texLoad.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg'),
             emissiveMap: texLoad.load('https://unpkg.com/three-globe/example/img/earth-night.jpg'),
@@ -728,17 +644,17 @@
         const earth = new THREE.Mesh(new THREE.SphereGeometry(5, 64, 64), earthMaterial);
         globeGroup.add(earth);
 
+        // Mond
         moonGroup = new THREE.Group();
-        scene.add(moonGroup);
         const moonGeo = new THREE.SphereGeometry(1.35, 32, 32);
         const moonMat = new THREE.MeshStandardMaterial({
             map: texLoad.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg'),
-            roughness: 0.8,
-            metalness: 0.1
+            roughness: 0.8, metalness: 0.1
         });
         const moonMesh = new THREE.Mesh(moonGeo, moonMat);
         moonMesh.position.set(20, 0, 0);
         moonGroup.add(moonMesh);
+        scene.add(moonGroup);
 
         scene.add(new THREE.AmbientLight(0x333333));
         const sunLight = new THREE.DirectionalLight(0xffffff, 1.8);
@@ -750,7 +666,18 @@
 
         animate();
         threeJSReady = true;
-        checkAndHideSplash();
+        checkSplash();
+
+        // Resize Handler für korrekte Skalierung
+        window.addEventListener('resize', () => {
+            if (!camera || !renderer) return;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            console.log('📐 Three.js Größe angepasst:', window.innerWidth, 'x', window.innerHeight);
+        });
+
+        console.log('✅ Three.js initialisiert:', window.innerWidth, 'x', window.innerHeight);
     }
 
     function latLonToPos(lat, lon, r) {
@@ -759,27 +686,10 @@
         return new THREE.Vector3(-(r * Math.sin(phi) * Math.cos(theta)), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta));
     }
 
-    function drawFlightPath(originCode, destCode) {
-        const origin = cityDatabase[originCode];
-        const dest = cityDatabase[destCode];
-        if (!origin || !dest) return;
-        const start = latLonToPos(origin.lat, origin.lon, 5.05);
-        const end = latLonToPos(dest.lat, dest.lon, 5.05);
-        const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-        mid.setLength(5.05 + start.distanceTo(end) * 0.4);
-        const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
-        const points = curve.getPoints(50);
-        const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        const material = new THREE.LineBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.6 });
-        markerGroup.add(new THREE.Line(geometry, material));
-    }
-
     function renderMarkers() {
         if (!markerGroup) return;
         const toRemove = [];
-        markerGroup.children.forEach(child => {
-            if (child.type === 'Mesh' && child.geometry?.type === 'SphereGeometry') toRemove.push(child);
-        });
+        markerGroup.children.forEach(child => { if (child.type === 'Mesh') toRemove.push(child); });
         toRemove.forEach(child => markerGroup.remove(child));
 
         Object.keys(trips).forEach(key => {
@@ -790,19 +700,23 @@
             m.userData = { key };
             markerGroup.add(m);
         });
-
-        const statCount = document.getElementById('stat-count');
-        if (statCount) statCount.innerText = Object.keys(trips).length;
+        document.getElementById('stat-count').innerText = Object.keys(trips).length;
     }
 
     function renderAllFlightPaths() {
+        if (!markerGroup) return;
         const toRemove = [];
         markerGroup.children.forEach(child => { if (child.type === 'Line') toRemove.push(child); });
         toRemove.forEach(child => markerGroup.remove(child));
         Object.keys(trips).forEach(key => {
-            const trip = trips[key];
-            if (trip.origin && trip.title && cityDatabase[trip.origin] && cityDatabase[trip.title]) {
-                drawFlightPath(trip.origin, trip.title);
+            const t = trips[key];
+            if (t.origin && cityDatabase[t.origin]) {
+                const start = latLonToPos(cityDatabase[t.origin].lat, cityDatabase[t.origin].lon, 5.05);
+                const end = latLonToPos(t.lat, t.lon, 5.05);
+                const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5).setLength(5.05 + start.distanceTo(end) * 0.3);
+                const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
+                const geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(50));
+                markerGroup.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.5 })));
             }
         });
     }
@@ -816,18 +730,12 @@
         if(renderer && scene && camera) renderer.render(scene, camera);
     }
 
-    window.addEventListener('resize', () => {
-        if (!camera || !renderer) return;
-        const container = document.getElementById('canvas-container');
-        camera.aspect = container.clientWidth / container.clientHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(container.clientWidth, container.clientHeight);
-    });
-
-    // --- UI HELPERS ---
-    function updateCounter(type, delta) {
-        passengerCounts[type] = Math.max(type === 'adults' ? 1 : 0, passengerCounts[type] + delta);
-        document.getElementById(`count-${type}`).innerText = passengerCounts[type];
+    // --- SEARCH LOGIC ---
+    function setSearchLoading(isLoading) {
+        const btn = document.getElementById('btn-search-trigger');
+        if (!btn) return;
+        btn.innerText = isLoading ? "SUCHE..." : "FLÜGE SUCHEN";
+        btn.disabled = isLoading;
     }
 
     async function performSearch() {
@@ -835,29 +743,48 @@
         const dest = document.getElementById('input-dest').value.trim().toUpperCase();
         const date = document.getElementById('input-start').value;
 
-        if (!origin || !dest || !date) { showToast('Bitte alle Felder ausfüllen'); return; }
+        console.log('🔍 Suche:', { origin, dest, date });
+
+        if (!origin || !dest || !date) {
+            console.log('❌ Fehlende Felder:', {
+                origin: origin || 'LEER',
+                dest: dest || 'LEER',
+                date: date || 'LEER'
+            });
+            showToast('Bitte alle Felder ausfüllen');
+            return;
+        }
 
         lastSearchContext = { origin, destination: dest, date };
         setSearchLoading(true);
 
-        try {
-            const response = await fetch('/api/search', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ origin, destination: dest, date, passengers: passengerCounts })
-            });
-            const data = await response.json();
-            if (data.success) {
-                renderResults(data.flights, dest, origin);
-                drawFlightPath(origin, dest);
-            } else {
-                showToast(data.error || 'Suche fehlgeschlagen');
+        if (qtChannelReady && window.backend) {
+            // Desktop Suche via Worker
+            window.backend.search_flights(origin, dest, date, passengerCounts);
+        } else {
+            // Web Suche via Flask
+            try {
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ origin, destination: dest, date, passengers: passengerCounts })
+                });
+                const data = await response.json();
+                handleSearchResults(data);
+            } catch (e) {
+                showToast('Verbindungsfehler');
+                setSearchLoading(false);
             }
-        } catch (e) {
-            console.error('Search error:', e);
-            showToast('Verbindungsfehler');
-        } finally {
-            setSearchLoading(false);
+        }
+    }
+
+    function handleSearchResults(data) {
+        setSearchLoading(false);
+        if (data.success) {
+            renderResults(data.flights, data.destination, data.origin);
+            flyTo(cityDatabase[data.destination]?.lat || 0, cityDatabase[data.destination]?.lon || 0);
+        } else {
+            showToast(data.error || 'Suche fehlgeschlagen');
         }
     }
 
@@ -867,90 +794,156 @@
         area.classList.remove('hidden');
         list.innerHTML = '';
 
-        if (!flights || flights.length === 0) {
-            list.innerHTML = '<p class="text-slate-400 text-center py-4">Keine Flüge gefunden</p>';
-            return;
-        }
-
-        flights.forEach((f) => {
-            const priceDisplay = typeof f.price === 'number' ? f.price + ' €' : f.price;
+        flights.forEach((f, idx) => {
             list.innerHTML += `
-                <div class="flight-result-card enter-pop">
+                <div class="flight-result-card enter-pop" style="animation-delay:${idx*50}ms">
                     <div class="flex items-center gap-4">
                         <div class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center font-black text-cyan-400 border border-slate-700">${f.airline.substring(0,2)}</div>
                         <div><p class="font-bold text-white text-sm">${f.airline}</p><p class="text-[9px] text-slate-500 uppercase">${f.departure} • ${f.duration}</p></div>
                     </div>
                     <div class="text-right flex items-center gap-4">
-                        <div><p class="text-lg font-black text-white">${priceDisplay}</p><p class="text-[9px] text-slate-400 uppercase font-bold">aktuell</p></div>
-                        <button onclick="saveTrip('${cityName}', '${f.airline}', '${priceDisplay}', '${originName}')" class="px-4 py-2 bg-cyan-500 text-slate-900 rounded-lg font-black text-[9px] uppercase">Planen</button>
+                        <div class="min-w-[80px]">
+                            <p class="text-lg font-black text-white">${f.price}€</p>
+                            <p class="text-[9px] text-slate-400 uppercase font-bold">aktuell</p>
+                        </div>
+                        <div class="flex flex-col gap-2">
+                            <button onclick="saveTrip('${cityName}', '${f.airline}', '${f.price}', '${originName}')" class="px-3 py-1 bg-cyan-500 text-slate-900 rounded-lg font-black text-[9px] uppercase">Planen</button>
+                            <div class="flex items-center gap-2">
+                                <input id="alert-input-${idx}" type="number" placeholder="Ziel" class="search-input !p-1 !text-center !w-16 !text-[10px]">
+                                <button onclick="addAlertFromResult('${cityName}', 'alert-input-${idx}')" class="px-2 py-1 border border-slate-700 rounded-lg text-[9px] font-black">ALARM</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
         });
     }
 
-    function saveTrip(dest, airline, priceText, origin) {
+    // --- DATA PERSISTENCE ---
+    async function saveTrip(dest, airline, price, origin) {
         const id = 't_' + Date.now();
         const coords = cityDatabase[dest] || { lat: 0, lon: 0 };
         const tripData = {
-            title: dest,
-            origin: origin,
+            title: dest, origin: origin,
             date: (new Date()).toLocaleDateString('de-DE', { month: 'short', year: 'numeric' }).toUpperCase(),
-            lat: coords.lat,
-            lon: coords.lon,
+            lat: coords.lat, lon: coords.lon,
             img: `https://loremflickr.com/800/600/city,${dest}?lock=${Math.floor(Math.random() * 100)}`,
             itinerary: [
-                { title: 'Hinflug', desc: `${airline} • ${priceText}` },
+                { title: 'Hinflug', desc: `${airline} • ${price}€` },
                 { title: 'Planung', desc: 'Hotel-Recherche aktiv' }
             ]
         };
 
-        if (currentUser && db) {
-            saveTripToFirestore(id, tripData);
+        trips[id] = tripData;
+        if (qtChannelReady && window.backend) {
+            window.backend.save_trip(id, tripData);
         } else {
-            trips[id] = tripData;
-            persistState();
-            renderMarkers();
-            renderPlanning();
+            if (currentUser) {
+                await fetch('/api/trips', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, data: tripData })
+                });
+            } else {
+                localStorage.setItem('tf_trips', JSON.stringify(trips));
+            }
         }
-
+        renderAll();
         hideAddTripModal();
         flyTo(coords.lat, coords.lon);
         showToast('Trip gespeichert');
     }
 
-    // --- NAVIGATION ---
+    async function deleteCurrentTrip() {
+        const id = currentDetailKey;
+        if (qtChannelReady && window.backend) {
+            window.backend.delete_trip(id);
+        } else {
+            if (currentUser) {
+                await fetch(`/api/trips/${id}`, { method: 'DELETE' });
+            }
+        }
+        delete trips[id];
+        renderAll();
+        closeDetail();
+        showToast('Reise entfernt');
+    }
+
+    async function addAlertFromResult(dest, inputId) {
+        const target = parseFloat(document.getElementById(inputId).value);
+        if (!target) return;
+        const alertData = { dest, targetPrice: target, createdAt: Date.now(), id: Date.now() };
+        priceAlerts.push(alertData);
+
+        if (qtChannelReady && window.backend) {
+            window.backend.save_alert(alertData);
+        } else {
+            if (currentUser) {
+                await fetch('/api/alerts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: alertData.id, data: alertData })
+                });
+            } else {
+                localStorage.setItem('tf_alerts', JSON.stringify(priceAlerts));
+            }
+        }
+        renderAlerts();
+        showToast('Alarm gesetzt');
+    }
+
+    // --- VIEW MANAGEMENT ---
     function switchView(view) {
         const home = document.getElementById('view-home');
         const tripsView = document.getElementById('view-trips');
+        const navHome = document.getElementById('nav-home');
+        const navTrips = document.getElementById('nav-trips');
+
         if (view === 'trips') {
-            home.classList.add('hidden'); tripsView.classList.remove('hidden');
+            home.classList.add('hidden');
+            tripsView.classList.remove('hidden');
             setTimeout(() => tripsView.classList.remove('opacity-0'), 10);
+            navHome.classList.replace('text-cyan-400', 'text-slate-500');
+            navTrips.classList.replace('text-slate-500', 'text-cyan-400');
+            renderPlanning();
             controls.autoRotate = false;
         } else {
-            tripsView.classList.add('hidden'); home.classList.remove('hidden');
+            tripsView.classList.add('hidden');
+            home.classList.remove('hidden');
+            navHome.classList.replace('text-slate-500', 'text-cyan-400');
+            navTrips.classList.replace('text-cyan-400', 'text-slate-500');
             controls.autoRotate = true;
         }
     }
 
+    function toggleTripTab(t) {
+        document.getElementById('trips-container').classList.toggle('hidden', t !== 'trips');
+        document.getElementById('alerts-container').classList.toggle('hidden', t !== 'alerts');
+        document.getElementById('tab-trips').className = t === 'trips' ? 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm transition-all' : 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm';
+        document.getElementById('tab-alerts').className = t === 'alerts' ? 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm transition-all' : 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm';
+    }
+
     function renderPlanning() {
         const c = document.getElementById('trips-container');
-        if (!c) return;
         const keys = Object.keys(trips);
-        if (!keys.length) {
-            c.innerHTML = '<div class="col-span-full text-center py-20 text-slate-500 font-bold uppercase text-xs">Noch keine Reisen geplant</div>';
-            return;
-        }
-        c.innerHTML = '';
-        keys.forEach(k => {
-            const t = trips[k];
-            c.innerHTML += `
-                <div class="glass-card rounded-3xl overflow-hidden cursor-pointer" onclick="openDetail('${k}'); flyTo(${t.lat}, ${t.lon})">
-                    <img src="${t.img}" class="h-40 w-full object-cover">
-                    <div class="p-6"><h3 class="font-black text-xl text-white">${t.title}</h3><p class="text-xs text-slate-400 uppercase font-bold tracking-widest">${t.date}</p></div>
-                </div>
-            `;
-        });
+        if (!keys.length) { c.innerHTML = '<div class="col-span-full text-center py-20 text-slate-500 font-bold uppercase text-xs">Noch keine Reisen geplant</div>'; return; }
+        c.innerHTML = keys.map(k => `
+            <div class="glass-card rounded-3xl overflow-hidden cursor-pointer enter-pop" onclick="openDetail('${k}'); flyTo(${trips[k].lat}, ${trips[k].lon})">
+                <img src="${trips[k].img}" class="h-40 w-full object-cover">
+                <div class="p-6"><h3 class="font-black text-xl text-white">${trips[k].title}</h3><p class="text-xs text-slate-400 uppercase font-bold tracking-widest">${trips[k].date}</p></div>
+            </div>
+        `).join('');
+    }
+
+    function renderAlerts() {
+        const c = document.getElementById('alerts-container');
+        if (!priceAlerts.length) { c.innerHTML = '<div class="col-span-full text-center py-20 text-slate-500 font-bold uppercase text-xs">Keine Alarme</div>'; return; }
+        c.innerHTML = priceAlerts.map(a => `
+            <div class="glass-card rounded-3xl p-6 flex flex-col gap-3">
+                <div class="flex justify-between items-center"><h3 class="font-black text-white text-xl">${a.dest}</h3><span class="material-symbols-outlined text-slate-500 text-sm">notifications</span></div>
+                <div class="bg-slate-900/50 p-4 rounded-xl border border-white/5"><p class="text-[10px] text-slate-400 uppercase font-bold">Zielpreis</p><p class="text-lg font-black text-cyan-400">≤ ${a.targetPrice}€</p></div>
+            </div>
+        `).join('');
     }
 
     function openDetail(k) {
@@ -959,39 +952,28 @@
         document.getElementById('detail-img').src = t.img;
         document.getElementById('detail-title').innerText = t.title;
         document.getElementById('detail-date').innerText = t.date;
-        const it = document.getElementById('detail-itinerary');
-        it.innerHTML = '';
-        t.itinerary.forEach(i => {
-            it.innerHTML += `<div class="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50"><p class="font-bold text-white text-sm">${i.title}</p><p class="text-[10px] text-slate-400 mt-1 uppercase font-bold">${i.desc}</p></div>`;
-        });
+        document.getElementById('detail-itinerary').innerHTML = t.itinerary.map(i => `
+            <div class="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
+                <p class="font-bold text-white text-sm">${i.title}</p>
+                <p class="text-[10px] text-slate-400 mt-1 uppercase font-bold">${i.desc}</p>
+            </div>
+        `).join('');
         document.getElementById('detail-sheet').classList.add('open');
     }
 
     function closeDetail() { document.getElementById('detail-sheet').classList.remove('open'); }
-    async function deleteCurrentTrip() {
-        if (currentUser && db) {
-            await deleteTripFromFirestore(currentDetailKey);
-        } else {
-            delete trips[currentDetailKey];
-            persistState();
-            renderMarkers(); renderPlanning();
-        }
-        closeDetail(); showToast('Reise entfernt');
-    }
-
     function showAddTripModal() { document.getElementById('add-trip-modal').classList.remove('hidden'); setTimeout(() => document.getElementById('add-trip-modal').classList.remove('opacity-0'), 10); }
     function hideAddTripModal() { document.getElementById('add-trip-modal').classList.add('hidden'); }
     function showToast(m) { const t = document.getElementById('toast'); document.getElementById('toast-text').innerText = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2200); }
-    function setSearchLoading(l) { document.getElementById('btn-search-trigger').innerText = l ? "SUCHE..." : "FLÜGE SUCHEN"; }
 
-    function checkAndHideSplash() {
-        if (threeJSReady && dataReady && !appReady) {
-            const elapsed = Date.now() - splashStartTime;
+    function checkSplash() {
+        if (dataReady && threeJSReady && !appReady) {
+            const diff = Date.now() - splashStartTime;
             setTimeout(() => {
                 appReady = true;
                 document.getElementById('splash-screen').classList.add('fade-out');
-                controls.autoRotate = true;
-            }, Math.max(0, MIN_SPLASH_TIME - elapsed));
+                if(controls) controls.autoRotate = true;
+            }, Math.max(0, MIN_SPLASH_TIME-diff));
         }
     }
 
@@ -1005,34 +987,49 @@
     document.addEventListener('DOMContentLoaded', () => {
         splashStartTime = Date.now();
         document.getElementById('splash-bar').style.width = "100%";
-        setTimeout(() => {
-            initThreeJS();
-            initFirebase();
-        }, 500);
-    });
 
-    const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-    window.addEventListener('pointerdown', (e) => {
-        if (e.target.closest('.interactive, button, input')) return;
-        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-        raycaster.setFromCamera(mouse, camera);
-        const hits = raycaster.intersectObjects(markerGroup.children);
-        if (hits.length > 0) {
-            const key = hits[0].object.userData.key;
-            openDetail(key);
-            flyTo(trips[key].lat, trips[key].lon);
+        // Setze Standard-Datum auf morgen
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const dateString = tomorrow.toISOString().split('T')[0];
+        const dateInput = document.getElementById('input-start');
+        if (dateInput) {
+            dateInput.value = dateString;
+            dateInput.min = new Date().toISOString().split('T')[0]; // Heute als Minimum
+            console.log('📅 Standard-Datum gesetzt:', dateString);
         }
-    });
 
-    function toggleTripTab(t) {
-        document.getElementById('trips-container').classList.toggle('hidden', t !== 'trips');
-        document.getElementById('alerts-container').classList.toggle('hidden', t !== 'alerts');
-        document.getElementById('tab-trips').className = t === 'trips' ? 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm' : 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm';
-        document.getElementById('tab-alerts').className = t === 'alerts' ? 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm' : 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm';
-    }
-    function renderAlerts() {}
+        initWebChannel();
+        initThreeJS();
+        initFirebase();
+
+        // Raycaster für Globe-Picking
+        const ray = new THREE.Raycaster(); const mouse = new THREE.Vector2();
+        window.addEventListener('pointerdown', (e) => {
+            if (e.target.closest('.interactive, button, input')) return;
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1; mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            ray.setFromCamera(mouse, camera);
+            if (markerGroup) {
+                const hits = ray.intersectObjects(markerGroup.children);
+                if (hits.length > 0) { const key = hits[0].object.userData.key; openDetail(key); flyTo(trips[key].lat, trips[key].lon); }
+            }
+        });
+
+        // Ripple Effect Generator
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('button');
+            if (btn && !btn.classList.contains('no-ripple')) {
+                const rect = btn.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const ripple = document.createElement('span');
+                ripple.className = 'ripple';
+                ripple.style.left = `${x}px`; ripple.style.top = `${y}px`;
+                btn.appendChild(ripple);
+                setTimeout(() => ripple.remove(), 700);
+            }
+        });
+    });
 </script>
 </body>
 </html>

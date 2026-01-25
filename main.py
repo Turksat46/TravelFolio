@@ -3,52 +3,49 @@ from flask import Flask, request, render_template, jsonify, make_response
 from fast_flights import FlightData, Passengers, Result, get_flights, search_airport
 
 import firebase_admin
-from firebase_admin import auth, credentials
-
+from firebase_admin import auth, credentials, firestore
 
 import datetime
 
 app = Flask(__name__)
 
+# Firebase Admin SDK Initialisierung
+# Stelle sicher, dass der Pfad zu deinem Key korrekt ist!
 cred = credentials.Certificate("./firebase-key/travel-e75e6-firebase-adminsdk-fbsvc-7ba67c5552.json")
 firebase_admin.initialize_app(cred)
+db = firestore.client()
+
+
+def get_authenticated_user():
+    """Verifiziert das Session-Cookie und gibt die UID zurück"""
+    session_cookie = request.cookies.get('session')
+    if not session_cookie:
+        return None
+    try:
+        decoded_claims = auth.verify_session_cookie(session_cookie, check_revoked=True)
+        return decoded_claims['uid']
+    except Exception:
+        return None
 
 
 @app.route('/')
 def index():
-    # Cookie laden
-    session_cookie = request.cookies.get('session')
-    user = None
-
-    if session_cookie:
-        try:
-            # Session-Cookie verifizieren
-            decoded_claims = auth.verify_session_cookie(session_cookie, check_revoked=True)
-            user = auth.get_user(decoded_claims['uid'])
-        except Exception as e:
-            print(f"Session Cookie Error: {str(e)}")
-            user = None
-
-    # Hauptseite laden
     return render_template('travelfolio.html')
+
 
 @app.route('/login', methods=['POST'])
 def login():
     id_token = request.json.get('idToken')
-    # Session Cookie Laufzeit: 5 Tage
     expires_in = datetime.timedelta(days=5)
     try:
-        # Erstelle das Session Cookie aus dem ID-Token
         session_cookie = auth.create_session_cookie(id_token, expires_in=expires_in)
         response = make_response(jsonify({'status': 'success'}))
-
-        # Cookie setzen (httponly für Sicherheit vor XSS)
         response.set_cookie(
             'session',
             session_cookie,
             max_age=int(expires_in.total_seconds()),
             httponly=True,
-            secure=False,  # Auf True setzen, wenn HTTPS verwendet wird (Produktion)
+            secure=False,  # Auf True setzen bei HTTPS
             samesite='Lax'
         )
         return response
@@ -59,96 +56,150 @@ def login():
 @app.route('/logout', methods=['POST'])
 def logout():
     response = make_response(jsonify({'status': 'success'}))
-    # Cookie im Browser löschen
     response.set_cookie('session', '', expires=0)
     return response
 
+
+# --- FIRESTORE API ENDPOINTS ---
+
+@app.route('/api/data', methods=['GET'])
+def get_user_data():
+    uid = get_authenticated_user()
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    try:
+        # Pfad: artifacts/travelfolio-3d-001/users/{uid}/trips
+        user_ref = db.collection('artifacts').document('travelfolio-3d-001').collection('users').document(uid)
+
+        trips = {doc.id: doc.to_dict() for doc in user_ref.collection('trips').stream()}
+        alerts = [{**doc.to_dict(), 'id': doc.id} for doc in user_ref.collection('alerts').stream()]
+
+        return jsonify({'trips': trips, 'alerts': alerts})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trips', methods=['POST'])
+def save_trip():
+    uid = get_authenticated_user()
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    data = request.json
+    trip_id = data.get('id')
+    trip_content = data.get('data')
+
+    try:
+        doc_ref = db.collection('artifacts').document('travelfolio-3d-001').collection('users').document(
+            uid).collection('trips').document(trip_id)
+        doc_ref.set(trip_content)
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trips/<trip_id>', methods=['DELETE'])
+def delete_trip(trip_id):
+    uid = get_authenticated_user()
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    try:
+        doc_ref = db.collection('artifacts').document('travelfolio-3d-001').collection('users').document(
+            uid).collection('trips').document(trip_id)
+        doc_ref.delete()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/alerts', methods=['POST'])
+def save_alert():
+    uid = get_authenticated_user()
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    data = request.json
+    alert_id = str(data.get('id'))
+    alert_content = data.get('data')
+
+    try:
+        doc_ref = db.collection('artifacts').document('travelfolio-3d-001').collection('users').document(
+            uid).collection('alerts').document(alert_id)
+        doc_ref.set(alert_content)
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/alerts/<alert_id>', methods=['DELETE'])
+def delete_alert(alert_id):
+    uid = get_authenticated_user()
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    try:
+        doc_ref = db.collection('artifacts').document('travelfolio-3d-001').collection('users').document(
+            uid).collection('alerts').document(alert_id)
+        doc_ref.delete()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# --- FLIGHT SEARCH ---
+
 @app.route('/api/search', methods=['POST'])
 def search():
-    """
-    Sucht nach Flügen über die fast-flights Bibliothek.
-    Fix: FlightData erwartet Keyword-only-Argumente für date, from_airport und to_airport.
-    """
     data = request.get_json()
-
     origin = str(data.get('origin', '').upper())
     destination = str(data.get('destination', '').upper())
     departure_date = str(data.get('date'))
     pass_data = data.get('passengers', {})
 
     if not all([origin, destination, departure_date]):
-        return jsonify({'error': 'Fehlende Parameter (Origin, Destination oder Date)'}), 400
-
-    if(len(origin) != 3 or len(destination) !=3):
-        search_airport(origin)[0]
-
-
+        return jsonify({'error': 'Fehlende Parameter'}), 400
 
     try:
-        # Passagier-Objekt erstellen
-        passengers: Passengers = Passengers(
+        passengers = Passengers(
             adults=int(pass_data.get('adults', 1)),
             children=int(pass_data.get('children', 0)),
             infants_in_seat=int(pass_data.get('infants', 0)),
             infants_on_lap=0
         )
 
-        # FIX: FlightData mit den exakt geforderten Keyword-Arguments instanziieren
-        # Laut Fehlermeldung: date, from_airport, to_airport
+        # IATA Suche falls nötig
+        if len(origin) != 3:
+            search_res = search_airport(origin)
+            if search_res:
+                origin = search_res[0].value if hasattr(search_res[0], 'value') else search_res[0]
+        if len(destination) != 3:
+            search_res = search_airport(destination)
+            if search_res:
+                destination = search_res[0].value if hasattr(search_res[0], 'value') else search_res[0]
 
-        if(len(origin) != 3 or len(destination) != 3):
-            origin = search_airport(origin)[0]
-            destination = search_airport(destination)[0]
+        flight_data = [FlightData(date=departure_date, from_airport=origin, to_airport=destination)]
+        result = get_flights(flight_data=flight_data, trip="one-way", seat="economy", passengers=passengers,
+                             fetch_mode="local")
 
-        flight_data = [FlightData(
-            date=departure_date,
-            from_airport=origin,
-            to_airport=destination
-        )]
-
-        print(departure_date)
-
-        # Flüge abrufen
-        # 'fetch_mode="local"' nutzen, um Google Consent Probleme zu umgehen (benötigt Playwright)
-        result:Result = get_flights(
-            flight_data=flight_data,
-            trip="one-way",
-            seat="economy",
-            passengers=passengers,
-            fetch_mode="local"
-        )
-        print(result)
-
-        # Ergebnisse für JSON-Response aufbereiten
         flights_list = []
         if result and result.flights:
             for flight in result.flights:
                 flights_list.append({
-                    'airline': flight.name, # .name wird in aktueller Version verwendet
+                    'airline': flight.name,
                     'price': flight.price,
                     'departure': flight.departure,
                     'arrival': flight.arrival,
                     'duration': flight.duration,
                     'stops': flight.stops,
-
                 })
 
-        return jsonify({
-            'success': True,
-            'origin': origin,
-            'destination': destination,
-            'flights': flights_list
-        })
-
+        return jsonify({'success': True, 'origin': origin, 'destination': destination, 'flights': flights_list})
     except Exception as e:
-        print(f"Search Error: {str(e)}")
-        # Rückgabe eines detaillierten Fehlers für das Debugging im Frontend
-        return jsonify({
-            'success': False,
-            'error': f"API Fehler: {str(e)}"
-        }), 500
+        print(e)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 if __name__ == '__main__':
-
     app.run(debug=True, port=5000)

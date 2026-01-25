@@ -1,18 +1,55 @@
 import sys
 import os
-from PySide6.QtCore import QUrl, Qt, Slot, QObject, Signal, QThread
+import json
+import datetime
+import threading
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+from PySide6.QtCore import QUrl, QStandardPaths, Slot, QObject, Signal, QThread
 from PySide6.QtGui import QIcon
-from PySide6.QtWebEngineCore import QWebEngineSettings
+from PySide6.QtWebEngineCore import QWebEngineSettings, QWebEngineProfile
 from PySide6.QtWidgets import QApplication, QMainWindow
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebChannel import QWebChannel
 
+# Firebase Admin SDK
+import firebase_admin
+from firebase_admin import credentials, firestore
+
 # Deine Flug-Bibliothek
 from fast_flights import FlightData, Passengers, get_flights, search_airport
 
+# --- EINFACHER HTTP SERVER FÜR DESKTOP ---
+class TravelFolioHTTPHandler(SimpleHTTPRequestHandler):
+    """Einfacher HTTP Handler für lokale Dateien"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=os.getcwd(), **kwargs)
+
+    def log_message(self, format, *args):
+        # Unterdrücke Server-Logs
+        pass
+
+def start_simple_http_server(port=5555):
+    """Startet einen einfachen HTTP-Server im Hintergrund"""
+    server = HTTPServer(('127.0.0.1', port), TravelFolioHTTPHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    print(f"🌐 HTTP-Server läuft auf http://127.0.0.1:{port}")
+    return server
+
+# --- FIREBASE INITIALISIERUNG ---
+cred_path = "./firebase-key/travel-e75e6-firebase-adminsdk-fbsvc-7ba67c5552.json"
+if os.path.exists(cred_path):
+    cred = credentials.Certificate(cred_path)
+    firebase_admin.initialize_app(cred)
+    db = firestore.client()
+else:
+    print(f"WARNUNG: Firebase Key nicht gefunden unter {cred_path}")
+    db = None
+
+
+
 
 # --- WORKER THREAD ---
-# Erledigt die schwere Arbeit im Hintergrund, damit der Globus sich weiterdreht
 class SearchWorker(QThread):
     finished = Signal(dict)
 
@@ -25,8 +62,7 @@ class SearchWorker(QThread):
 
     def run(self):
         try:
-            print(f"SearchWorker started: {self.origin} -> {self.destination} on {self.date}")
-            print(f"Passenger data: {self.pass_data}")
+            print(f"Suche gestartet: {self.origin} -> {self.destination} am {self.date}")
 
             passengers = Passengers(
                 adults=int(self.pass_data.get('adults', 1)),
@@ -35,45 +71,24 @@ class SearchWorker(QThread):
                 infants_on_lap=0
             )
 
-            # Airport-Codes validieren und konvertieren
-            # Wenn bereits 3-stelliger Code, verwenden wir ihn direkt
-            if len(self.origin) == 3:
-                print(f"Verwende Origin-Code direkt: {self.origin}")
-            else:
-                print(f"Suche Flughafen für Origin: {self.origin}")
-                origin_results = search_airport(self.origin)
-                print(f"Gefundene Origin-Flughäfen: {origin_results}")
-                if not origin_results:
-                    raise ValueError(
-                        f"Kein Flughafen gefunden für: {self.origin}\n"
-                        f"Bitte verwenden Sie den 3-stelligen IATA-Code.\n"
-                        f"Beispiele: FRA (Frankfurt), JFK (New York), LHR (London)"
-                    )
-                self.origin = origin_results[0].value  # .value um den String aus dem Enum zu holen
-                print(f"Verwende Origin-Code: {self.origin}")
+            current_origin = self.origin
+            if len(current_origin) != 3:
+                res = search_airport(current_origin)
+                if res:
+                    current_origin = res[0].value if hasattr(res[0], 'value') else res[0]
 
-            if len(self.destination) == 3:
-                print(f"Verwende Destination-Code direkt: {self.destination}")
-            else:
-                print(f"Suche Flughafen für Destination: {self.destination}")
-                dest_results = search_airport(self.destination)
-                print(f"Gefundene Destination-Flughäfen: {dest_results}")
-                if not dest_results:
-                    raise ValueError(
-                        f"Kein Flughafen gefunden für: {self.destination}\n"
-                        f"Bitte verwenden Sie den 3-stelligen IATA-Code.\n"
-                        f"Beispiele: NRT (Tokyo Narita), HND (Tokyo Haneda), CDG (Paris)"
-                    )
-                self.destination = dest_results[0].value  # .value um den String aus dem Enum zu holen
-                print(f"Verwende Destination-Code: {self.destination}")
+            current_dest = self.destination
+            if len(current_dest) != 3:
+                res = search_airport(current_dest)
+                if res:
+                    current_dest = res[0].value if hasattr(res[0], 'value') else res[0]
 
             flight_data = [FlightData(
                 date=self.date,
-                from_airport=self.origin,
-                to_airport=self.destination
+                from_airport=current_origin,
+                to_airport=current_dest
             )]
 
-            # Hier passiert das eigentliche "Rendern" der Flugdaten via Playwright
             result = get_flights(
                 flight_data=flight_data,
                 trip="one-way",
@@ -96,15 +111,12 @@ class SearchWorker(QThread):
 
             self.finished.emit({
                 'success': True,
-                'origin': self.origin,
-                'destination': self.destination,
+                'origin': current_origin,
+                'destination': current_dest,
                 'flights': flights_list
             })
-            print(f"Search completed successfully: {len(flights_list)} flights found")
         except Exception as e:
-            print(f"Search error: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            print(f"Suche fehlgeschlagen: {str(e)}")
             self.finished.emit({
                 'success': False,
                 'error': str(e),
@@ -114,90 +126,218 @@ class SearchWorker(QThread):
 
 
 # --- BRIDGE ---
-# Die Schnittstelle, die vom HTML aus aufgerufen werden kann
 class Bridge(QObject):
     resultsReady = Signal(dict)
-    dataLoaded = Signal(dict)  # Signal to send loaded data to JavaScript
+    dataLoaded = Signal(dict)
 
     def __init__(self):
         super().__init__()
-        self.data_dir = os.path.join(os.path.expanduser("~"), ".travelfolio")
-        self.trips_file = os.path.join(self.data_dir, "trips.json")
-        self.alerts_file = os.path.join(self.data_dir, "alerts.json")
+        self.current_uid = None
+        self.app_id = "travelfolio-3d-001"
 
-        # Create data directory if it doesn't exist
+        # Lokaler Datenpfad
+        self.data_dir = os.path.join(os.path.expanduser("~"), ".travelfolio")
         os.makedirs(self.data_dir, exist_ok=True)
-        print(f"Data directory: {self.data_dir}")
+
+        # Session-Datei für persistente UID
+        self.session_file = os.path.join(self.data_dir, "session.json")
+
+        # Lade gespeicherte Session beim Start
+        self._load_saved_session()
+
+    def _load_saved_session(self):
+        """Lädt gespeicherte User-Session aus lokaler Datei"""
+        if os.path.exists(self.session_file):
+            try:
+                with open(self.session_file, 'r') as f:
+                    session_data = json.load(f)
+                    expires = session_data.get('expires')
+                    if expires and datetime.datetime.fromisoformat(expires) > datetime.datetime.now():
+                        self.current_uid = session_data.get('uid')
+                        print(f"🔐 Gespeicherte Session wiederhergestellt: {self.current_uid}")
+                        return self.current_uid
+                    else:
+                        print("⏰ Session abgelaufen")
+                        os.remove(self.session_file)
+            except Exception as e:
+                print(f"⚠️ Fehler beim Laden der Session: {e}")
+        return None
+
+    def _save_session(self, uid, days=5):
+        """Speichert User-Session lokal (5 Tage Gültigkeit)"""
+        expires = datetime.datetime.now() + datetime.timedelta(days=days)
+        session_data = {
+            'uid': uid,
+            'expires': expires.isoformat()
+        }
+        with open(self.session_file, 'w') as f:
+            json.dump(session_data, f)
+        print(f"💾 Session gespeichert bis {expires.strftime('%d.%m.%Y %H:%M')}")
+
+    def _clear_session(self):
+        """Löscht gespeicherte Session"""
+        if os.path.exists(self.session_file):
+            os.remove(self.session_file)
+            print("🗑️ Session gelöscht")
+
+    @Slot(result=str)
+    def get_saved_uid(self):
+        """Gibt die gespeicherte UID zurück (für automatisches Login)"""
+        if self.current_uid:
+            return self.current_uid
+        return ""
+
+    @Slot(str)
+    def set_user_auth(self, uid):
+        """Wird aufgerufen, wenn der User sich in der HTML eingeloggt hat"""
+        self.current_uid = uid
+        self._save_session(uid)
+        print(f"✅ User authentifiziert: {uid}")
+        self.load_data()
+
+    @Slot()
+    def logout_user(self):
+        """Logout - löscht gespeicherte Session"""
+        self.current_uid = None
+        self._clear_session()
+        print("👋 User ausgeloggt")
+
+    # ...existing code...
 
     @Slot(str, str, str, dict)
     def search_flights(self, origin, destination, date, pass_data):
-        print(f"Bridge.search_flights called: {origin} -> {destination}, date: {date}")
-        print(f"Passenger data type: {type(pass_data)}, value: {pass_data}")
-        # Wir erstellen einen neuen Thread für jede Suche
         self.worker = SearchWorker(origin.upper(), destination.upper(), date, pass_data)
-        self.worker.finished.connect(lambda data: self.resultsReady.emit(data))
+        self.worker.finished.connect(self.resultsReady.emit)
         self.worker.start()
-        print("Worker thread started")
 
-    @Slot(str)
-    def save_data(self, data_json):
-        """Save both trips and alerts data to local JSON files"""
-        try:
-            import json
-            data = json.loads(data_json)
-
-            # Save trips
-            if 'trips' in data:
-                with open(self.trips_file, 'w', encoding='utf-8') as f:
-                    json.dump(data['trips'], f, ensure_ascii=False, indent=2)
-                print(f"Trips saved: {len(data['trips'])} trips")
-
-            # Save alerts
-            if 'alerts' in data:
-                with open(self.alerts_file, 'w', encoding='utf-8') as f:
-                    json.dump(data['alerts'], f, ensure_ascii=False, indent=2)
-                print(f"Alerts saved: {len(data['alerts'])} alerts")
-
-            return True
-        except Exception as e:
-            print(f"Error saving data: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
+    # --- FIRESTORE OPERATIONEN (Analog zu main.py) ---
 
     @Slot()
     def load_data(self):
-        """Load data from local JSON files and emit via signal"""
+        """Lädt Daten aus Firestore (oder lokal, falls nicht eingeloggt)"""
+        # Wenn keine UID, versuche gespeicherte Session zu laden
+        if not self.current_uid:
+            saved_uid = self._load_saved_session()
+            if saved_uid:
+                self.current_uid = saved_uid
+
+        if not db or not self.current_uid:
+            # Fallback auf lokale JSONs wenn kein Firebase/User
+            print("📂 Lade lokale Daten (kein Login)")
+            self._load_local_data()
+            return
+
         try:
-            import json
-            trips = {}
+            user_ref = db.collection('artifacts').document(self.app_id).collection('users').document(self.current_uid)
+
+            trips = {doc.id: doc.to_dict() for doc in user_ref.collection('trips').stream()}
+
             alerts = []
+            for doc in user_ref.collection('alerts').stream():
+                alert_data = doc.to_dict()
+                alert_data['id'] = doc.id
+                alerts.append(alert_data)
 
-            # Load trips
-            if os.path.exists(self.trips_file):
-                with open(self.trips_file, 'r', encoding='utf-8') as f:
-                    trips = json.load(f)
-                print(f"Trips loaded: {len(trips)} trips")
-
-            # Load alerts
-            if os.path.exists(self.alerts_file):
-                with open(self.alerts_file, 'r', encoding='utf-8') as f:
-                    alerts = json.load(f)
-                print(f"Alerts loaded: {len(alerts)} alerts")
-
-            # Emit data via signal
-            self.dataLoaded.emit({
-                'trips': trips,
-                'alerts': alerts
-            })
-            print("Data emitted via dataLoaded signal")
-
+            print(f"☁️ Daten aus Firestore geladen für {self.current_uid}: {len(trips)} Trips")
+            self.dataLoaded.emit({'trips': trips, 'alerts': alerts})
         except Exception as e:
-            print(f"Error loading data: {e}")
-            import traceback
-            traceback.print_exc()
-            # Emit empty data on error
-            self.dataLoaded.emit({'trips': {}, 'alerts': []})
+            print(f"❌ Firestore Load Error: {e}")
+            self._load_local_data()
+
+    @Slot(str, dict)
+    def save_trip(self, trip_id, trip_data):
+        if not db or not self.current_uid:
+            return self._save_local_trip(trip_id, trip_data)
+
+        try:
+            doc_ref = db.collection('artifacts').document(self.app_id).collection('users').document(
+                self.current_uid).collection('trips').document(trip_id)
+            doc_ref.set(trip_data)
+            return True
+        except Exception as e:
+            print(f"Firestore Save Trip Error: {e}")
+            return False
+
+    @Slot(str)
+    def delete_trip(self, trip_id):
+        if not db or not self.current_uid:
+            return self._delete_local_trip(trip_id)
+
+        try:
+            doc_ref = db.collection('artifacts').document(self.app_id).collection('users').document(
+                self.current_uid).collection('trips').document(trip_id)
+            doc_ref.delete()
+            return True
+        except Exception as e:
+            print(f"Firestore Delete Trip Error: {e}")
+            return False
+
+    @Slot(dict)
+    def save_alert(self, alert_data):
+        if not db or not self.current_uid:
+            return False  # Alarme aktuell nur mit Cloud
+
+        try:
+            alert_id = str(alert_data.get('id', datetime.datetime.now().timestamp()))
+            doc_ref = db.collection('artifacts').document(self.app_id).collection('users').document(
+                self.current_uid).collection('alerts').document(alert_id)
+            doc_ref.set(alert_data)
+            return True
+        except Exception as e:
+            print(f"Firestore Save Alert Error: {e}")
+            return False
+
+    # --- INTERNE HILFSMETHODEN FÜR LOKALEN FALLBACK ---
+
+    def _load_local_data(self):
+        trips_path = os.path.join(self.data_dir, "trips.json")
+        alerts_path = os.path.join(self.data_dir, "alerts.json")
+        trips = {}
+        alerts = []
+        if os.path.exists(trips_path):
+            with open(trips_path, 'r') as f: trips = json.load(f)
+        if os.path.exists(alerts_path):
+            with open(alerts_path, 'r') as f: alerts = json.load(f)
+        self.dataLoaded.emit({'trips': trips, 'alerts': alerts})
+
+    def _save_local_trip(self, trip_id, trip_data):
+        path = os.path.join(self.data_dir, "trips.json")
+        data = {}
+        if os.path.exists(path):
+            with open(path, 'r') as f: data = json.load(f)
+        data[trip_id] = trip_data
+        with open(path, 'w') as f: json.dump(data, f, indent=2)
+        return True
+
+    def _delete_local_trip(self, trip_id):
+        path = os.path.join(self.data_dir, "trips.json")
+        if not os.path.exists(path): return False
+        with open(path, 'r') as f:
+            data = json.load(f)
+        if trip_id in data:
+            del data[trip_id]
+            with open(path, 'w') as f: json.dump(data, f, indent=2)
+        return True
+
+
+class PopupWindow(QMainWindow):
+    """Separates Fenster für Login-Popups (z.B. Google Auth)"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("TravelFolio - Login")
+        self.resize(500, 600)
+
+        self.browser = QWebEngineView()
+        settings = self.browser.settings()
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows, True)
+
+        # Debugging
+        self.browser.loadStarted.connect(lambda: print(f"🔓 Popup lädt URL..."))
+        self.browser.loadFinished.connect(lambda ok: print(f"🔓 Popup geladen: {'✅' if ok else '❌'}"))
+
+        self.setCentralWidget(self.browser)
 
 
 class TravelFolioApp(QMainWindow):
@@ -207,36 +347,87 @@ class TravelFolioApp(QMainWindow):
         self.setWindowIcon(QIcon("./static/logo.png"))
         self.resize(1280, 800)
 
-        # WebEngine-Setup
+        # Persistentes Profil für Cookie-Speicherung
+        profile = QWebEngineProfile.defaultProfile()
+        profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
+
+        # Setze persistenten Storage-Pfad
+        storage_path = os.path.join(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation), "TravelFolio")
+        os.makedirs(storage_path, exist_ok=True)
+        profile.setPersistentStoragePath(storage_path)
+        profile.setCachePath(storage_path)
+
+        print(f"📦 Cookie-Speicher: {storage_path}")
+
         self.browser = QWebEngineView()
 
         settings = self.browser.settings()
         settings.setAttribute(QWebEngineSettings.WebAttribute.WebGLEnabled, True)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
 
-        # WebChannel-Setup
+        # JavaScript Console Nachrichten im Terminal anzeigen
+        self.browser.page().javaScriptConsoleMessage = self.on_console_message
+
+        # Handler für Popup-Fenster (z.B. Google Login)
+        self.browser.page().newWindowRequested.connect(self.on_new_window)
+
         self.channel = QWebChannel()
         self.bridge = Bridge()
         self.channel.registerObject("backend", self.bridge)
         self.browser.page().setWebChannel(self.channel)
 
-        # Pfad zur HTML Datei
-        file_path = os.path.abspath("templates/travelfolio.html")
-        self.browser.load(QUrl.fromLocalFile(file_path))
+        # Lade von lokalem HTTP-Server (für Firebase Auth)
+        self.browser.load(QUrl("http://127.0.0.1:5555/templates/travelfolio.html"))
+        print(f"📄 Lade: http://127.0.0.1:5555/templates/travelfolio.html")
 
         self.setCentralWidget(self.browser)
 
+        # Liste der offenen Popup-Fenster
+        self.popup_windows = []
+
+    def on_console_message(self, level, message, line, source):
+        """Zeigt JavaScript Console Nachrichten im Terminal an"""
+        print(f"js: {message}")
+
+    def on_new_window(self, request):
+        """Wird aufgerufen, wenn JavaScript window.open() oder ein Popup öffnen möchte"""
+        print(f"🔓 Popup-Request erhalten!")
+        print(f"   URL: {request.requestedUrl()}")
+        print(f"   Destination: {request.destination()}")
+
+        popup = PopupWindow(self)
+
+        # Verbinde das neue Fenster mit der Request
+        request.openIn(popup.browser.page())
+
+        # Zeige das Popup-Fenster
+        popup.show()
+
+        # Speichere Referenz, damit es nicht garbage collected wird
+        self.popup_windows.append(popup)
+
+        # Cleanup wenn Fenster geschlossen wird
+        popup.destroyed.connect(lambda: self.popup_windows.remove(popup) if popup in self.popup_windows else None)
+
+        print("✅ Login-Popup-Fenster erstellt und angezeigt")
+
 
 if __name__ == "__main__":
-    # Fix für High-DPI Displays (wird in Qt6 automatisch gehandhabt,
-    # aber Umgebungsvariablen helfen bei der Konsistenz)
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
     os.environ["QTWEBENGINE_REMOTE_DEBUGGING"] = "9222"
+
+    print("🚀 Starte TravelFolio Desktop...")
+
+    # Starte einfachen HTTP-Server für Firebase Auth
+    start_simple_http_server(5555)
 
     app = QApplication(sys.argv)
     window = TravelFolioApp()
     window.show()
+
+    print("✅ App gestartet")
+
     sys.exit(app.exec())
