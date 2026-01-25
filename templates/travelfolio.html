@@ -18,6 +18,19 @@
     <!-- Qt WebChannel - Wird im Browser ignoriert, in Qt geladen -->
     <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
 
+    <!-- Externe Firebase Konfiguration laden -->
+    <script src="{{ url_for('static', filename='firebase-config.js') }}"></script>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, query, deleteDoc } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+
+        // Globaler Zugriff für das restliche Skript
+        window.firebaseModules = { initializeApp, getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, signInWithCustomToken, signInAnonymously, getFirestore, doc, setDoc, getDoc, collection, onSnapshot, query, deleteDoc };
+    </script>
+
     <style>
         :root {
             --bg: #020617;
@@ -294,6 +307,14 @@
 
         .loading-bar-container { width: 200px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-top: 2rem; overflow: hidden; }
         .loading-bar-fill { height: 100%; width: 0%; background: var(--primary); transition: width 0.5s ease; }
+
+        .auth-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 999px;
+            border: 2px solid var(--primary);
+            object-fit: cover;
+        }
     </style>
 </head>
 <body>
@@ -301,7 +322,7 @@
 <div id="app-container">
     <div id="splash-screen">
         <div class="splash-logo">
-            <img src="{{ url_for('static', filename='logo.png') }}" onerror="this.src='../static/logo.png'" alt="Logo" class="w-16 h-16 object-contain">
+            <img src="../static/logo.png" onerror="this.src='https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/plane.svg'" alt="Logo" class="w-16 h-16 object-contain">
         </div>
         <div class="text-center">
             <h1 class="text-3xl font-black text-white uppercase mb-1 tracking-tighter">TravelFolio 3D</h1>
@@ -326,14 +347,26 @@
         <div class="content-limit flex justify-between items-center">
             <div class="flex items-center gap-4 pointer-events-auto cursor-pointer" onclick="switchView('home')">
                 <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center p-2">
-                    <img src="{{ url_for('static', filename='logo.png') }}" onerror="this.src='../static/logo.png'" alt="Logo" class="w-full h-full object-contain">
+                    <img src="../static/logo.png" onerror="this.src='https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/plane.svg'" alt="Logo" class="w-full h-full object-contain">
                 </div>
                 <span class="text-2xl font-black text-white uppercase tracking-tighter">TravelFolio</span>
             </div>
-            <button class="relative w-12 h-12 rounded-full bg-white/5 flex items-center justify-center backdrop-blur-md pointer-events-auto hover:bg-white/10 transition border border-white/10">
-                <span class="material-symbols-outlined text-slate-200">notifications</span>
-                <span id="notif-badge" class="absolute top-3 right-3 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-900 hidden"></span>
-            </button>
+            <div class="flex items-center gap-3 pointer-events-auto">
+                <div id="user-profile" class="hidden flex items-center gap-3 glass rounded-full pl-2 pr-4 py-1.5 border border-white/10">
+                    <img id="user-photo" src="" class="auth-avatar" alt="User">
+                    <div class="flex flex-col">
+                        <span id="user-name" class="text-[10px] font-black text-white leading-none">User Name</span>
+                        <button onclick="handleLogout()" class="text-[8px] font-bold text-cyan-400 uppercase tracking-widest text-left">Logout</button>
+                    </div>
+                </div>
+                <button id="login-btn" onclick="handleLogin()" class="glass rounded-full px-5 py-2.5 text-[10px] font-black text-white uppercase tracking-widest border border-white/10 hover:bg-white/10 transition">
+                    Login mit Google
+                </button>
+                <button class="relative w-12 h-12 rounded-full bg-white/5 flex items-center justify-center backdrop-blur-md hover:bg-white/10 transition border border-white/10">
+                    <span class="material-symbols-outlined text-slate-200">notifications</span>
+                    <span id="notif-badge" class="absolute top-3 right-3 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-900 hidden"></span>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -384,12 +417,12 @@
             <div id="search-inputs" class="space-y-6 shrink-0 overflow-y-auto pr-2 no-scrollbar">
                 <div class="grid grid-cols-2 gap-6">
                     <div>
-                        <label class="text-[10px] text-slate-500 uppercase font-black tracking-widest ml-1 mb-2 block">VON (IATA)</label>
-                        <input id="input-origin" type="text" placeholder="z.B. FRA" class="search-input uppercase font-bold" maxlength="3">
+                        <label class="text-[10px] text-slate-500 uppercase font-black tracking-widest ml-1 mb-2 block">VON (Ort oder IATA)</label>
+                        <input id="input-origin" type="text" placeholder="z.B. Frankfurt oder FRA" class="search-input uppercase font-bold">
                     </div>
                     <div>
-                        <label class="text-[10px] text-slate-500 uppercase font-black tracking-widest ml-1 mb-2 block">NACH (IATA)</label>
-                        <input id="input-dest" type="text" placeholder="z.B. TYO" class="search-input uppercase font-bold" maxlength="3">
+                        <label class="text-[10px] text-slate-500 uppercase font-black tracking-widest ml-1 mb-2 block">NACH (Ort oder IATA)</label>
+                        <input id="input-dest" type="text" placeholder="z.B. Tokyo oder TYO" class="search-input uppercase font-bold">
                     </div>
                 </div>
                 <input id="input-start" type="date" class="search-input">
@@ -440,6 +473,149 @@
 </div>
 
 <script>
+    // --- FIREBASE CONFIG & AUTH ---
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'travelfolio-3d-001';
+    let firebaseApp, auth, db, currentUser = null;
+
+    async function initFirebase() {
+        if (!window.firebaseModules) return;
+        const { initializeApp, getAuth, getFirestore, signInWithCustomToken, signInAnonymously, onAuthStateChanged } = window.firebaseModules;
+
+        try {
+            // Prüfung: Kommt die Config als String vom Backend oder als Objekt aus der externen JS-Datei?
+            let firebaseConfig;
+            if (typeof __firebase_config === 'undefined') {
+                console.error('Firebase Konfiguration wurde nicht geladen!');
+                loadData();
+                return;
+            }
+
+            if (typeof __firebase_config === 'string') {
+                firebaseConfig = JSON.parse(__firebase_config);
+            } else {
+                firebaseConfig = __firebase_config;
+            }
+
+            firebaseApp = initializeApp(firebaseConfig);
+            auth = getAuth(firebaseApp);
+            db = getFirestore(firebaseApp);
+
+            const initAuth = async () => {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                }
+            };
+            await initAuth();
+
+            onAuthStateChanged(auth, (user) => {
+                currentUser = user;
+                updateAuthUI(user);
+                if (user) {
+                    syncWithFirestore();
+                } else {
+                    loadData();
+                }
+            });
+        } catch (e) {
+            console.error('Firebase Init Error:', e);
+            loadData();
+        }
+    }
+
+    async function handleLogin() {
+        const { signInWithPopup, GoogleAuthProvider } = window.firebaseModules;
+        const provider = new GoogleAuthProvider();
+        try {
+            const result = await signInWithPopup(auth, provider);
+            const idToken = await result.user.getIdToken();
+
+            // Backend-Session synchronisieren
+            const response = await fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ idToken: idToken })
+            });
+
+            if (response.ok) {
+                showToast('Erfolgreich eingeloggt');
+            }
+        } catch (error) {
+            console.error('Login Error:', error);
+            showToast('Login fehlgeschlagen');
+        }
+    }
+
+    async function handleLogout() {
+        const { signOut } = window.firebaseModules;
+        try {
+            await signOut(auth);
+            await fetch('/logout', { method: 'POST' });
+            showToast('Ausgeloggt');
+            window.location.reload();
+        } catch (error) {
+            console.error('Logout Error:', error);
+        }
+    }
+
+    function updateAuthUI(user) {
+        const loginBtn = document.getElementById('login-btn');
+        const userProfile = document.getElementById('user-profile');
+        const userPhoto = document.getElementById('user-photo');
+        const userName = document.getElementById('user-name');
+
+        if (user) {
+            if (loginBtn) loginBtn.classList.add('hidden');
+            if (userProfile) userProfile.classList.remove('hidden');
+            if (userPhoto) userPhoto.src = user.photoURL || 'https://www.gravatar.com/avatar/?d=mp';
+            if (userName) userName.innerText = user.displayName || 'Traveler';
+        } else {
+            if (loginBtn) loginBtn.classList.remove('hidden');
+            if (userProfile) userProfile.classList.add('hidden');
+        }
+    }
+
+    // --- DATA PERSISTENCE (FIRESTORE) ---
+    async function syncWithFirestore() {
+        if (!currentUser || !db) return;
+        const { collection, onSnapshot } = window.firebaseModules;
+
+        const tripsPath = `/artifacts/${appId}/users/${currentUser.uid}/trips`;
+        const tripsRef = collection(db, ...tripsPath.split('/').filter(p => p));
+        onSnapshot(tripsRef, (snapshot) => {
+            const remoteTrips = {};
+            snapshot.forEach(doc => { remoteTrips[doc.id] = doc.data(); });
+            trips = remoteTrips;
+            renderMarkers();
+            renderAllFlightPaths();
+            renderPlanning();
+            dataReady = true;
+            checkAndHideSplash();
+        });
+
+        const alertsPath = `/artifacts/${appId}/users/${currentUser.uid}/alerts`;
+        const alertsRef = collection(db, ...alertsPath.split('/').filter(p => p));
+        onSnapshot(alertsRef, (snapshot) => {
+            const remoteAlerts = [];
+            snapshot.forEach(doc => { remoteAlerts.push({ ...doc.data(), id: doc.id }); });
+            priceAlerts = remoteAlerts;
+            renderAlerts();
+        });
+    }
+
+    async function saveTripToFirestore(tripId, tripData) {
+        if (!currentUser || !db) return;
+        const { doc, setDoc } = window.firebaseModules;
+        const tripDoc = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'trips', tripId);
+        await setDoc(tripDoc, tripData);
+    }
+
+    async function deleteTripFromFirestore(tripId) {
+        if (!currentUser || !db) return;
+        const { doc, deleteDoc } = window.firebaseModules;
+        const tripDoc = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'trips', tripId);
+        await deleteDoc(tripDoc);
+    }
+
     // --- STATE & CONFIG ---
     const cityDatabase = {
         "FRA": {lat: 50.03, lon: 8.57}, "LHR": {lat: 51.47, lon: -0.45}, "TYO": {lat: 35.67, lon: 139.65}, "JFK": {lat: 40.64, lon: -73.77},
@@ -456,73 +632,45 @@
     let threeJSReady = false;
     let dataReady = false;
     let splashStartTime = Date.now();
-    const MIN_SPLASH_TIME = 2500; // Minimum 2.5 seconds splash display
+    const MIN_SPLASH_TIME = 2500;
 
     function persistState() {
-        // Desktop version: Save to local files via Qt backend
+        if (currentUser && db) return;
         if (qtChannelReady && window.backend?.save_data) {
-            const data = {
-                trips: trips,
-                alerts: priceAlerts
-            };
+            const data = { trips, alerts: priceAlerts };
             window.backend.save_data(JSON.stringify(data));
-            console.log('💾 Data save requested via Qt backend');
         } else {
-            // Web version: Use localStorage
             localStorage.setItem('tf_trips', JSON.stringify(trips));
             localStorage.setItem('tf_alerts', JSON.stringify(priceAlerts));
-            console.log('💾 Data saved to localStorage');
         }
     }
 
     function loadData() {
-        console.log('loadData() called, qtChannelReady:', qtChannelReady);
-
-        // Desktop version: Request load from Qt backend (will trigger dataLoaded signal)
         if (qtChannelReady && window.backend?.load_data) {
-            console.log('📥 Requesting data load from Qt backend...');
             window.backend.load_data();
-            // Data will be received via dataLoaded signal
             return true;
         } else {
-            // Web version: Load from localStorage
-            console.log('📥 Loading via localStorage...');
             trips = JSON.parse(localStorage.getItem('tf_trips')) || {};
             priceAlerts = JSON.parse(localStorage.getItem('tf_alerts')) || [];
-            console.log('✅ Data loaded from localStorage:', Object.keys(trips).length, 'trips,', priceAlerts.length, 'alerts');
-
             dataReady = true;
             checkAndHideSplash();
+            renderMarkers();
+            renderAllFlightPaths();
+            renderAlerts();
+            renderPlanning();
             return true;
         }
     }
 
     function handleDataLoaded(data) {
-        console.log('📦 handleDataLoaded called with data:', data);
-
-        if (!data) {
-            console.error('❌ No data received');
-            dataReady = true;
-            checkAndHideSplash();
-            return;
-        }
-
+        if (!data) { dataReady = true; checkAndHideSplash(); return; }
         trips = data.trips || {};
         priceAlerts = data.alerts || [];
-
-        console.log('✅ Data loaded via Qt backend:', Object.keys(trips).length, 'trips,', priceAlerts.length, 'alerts');
-        console.log('Trips object:', trips);
-        console.log('Alerts array:', priceAlerts);
-
-        // Update UI after data is loaded
-        console.log('🎨 Updating UI with loaded data...');
         setTimeout(() => {
             renderMarkers();
             renderAllFlightPaths();
             renderAlerts();
             renderPlanning();
-            console.log('✅ UI updated after data load');
-
             dataReady = true;
             checkAndHideSplash();
         }, 100);
@@ -530,7 +678,7 @@
 
     // --- THREE.JS ENGINE ---
     let scene, camera, renderer, controls, globeGroup, markerGroup;
-    let earthMaterial, stars, atmosphere, moonGroup, sunSprite;
+    let earthMaterial, stars, atmosphere, moonGroup;
 
     function initThreeJS() {
         const container = document.getElementById('canvas-container');
@@ -580,59 +728,11 @@
         const earth = new THREE.Mesh(new THREE.SphereGeometry(5, 64, 64), earthMaterial);
         globeGroup.add(earth);
 
-        const moonGeometry = new THREE.SphereGeometry(1.25, 128, 128);
-        const moonTexture = texLoad.load('https://unpkg.com/three-globe/example/img/moon.jpg');
-        const moonMaterial = new THREE.MeshStandardMaterial({
-            map: moonTexture,
-            bumpMap: moonTexture,
-            bumpScale: 0.05,
-            displacementMap: moonTexture,
-            displacementScale: 0.1,
-            roughness: 1.0,
-            metalness: 0.0
-        });
-        const moon = new THREE.Mesh(moonGeometry, moonMaterial);
-        moon.rotation.x = Math.PI / 8;
-        scene.add(moon);
-
-        const sunGeometry = new THREE.SphereGeometry(4, 64, 64);
-        const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xfff9e6 });
-        const sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
-        sunMesh.position.set(150, 80, 150);
-        scene.add(sunMesh);
-
-        scene.add(new THREE.AmbientLight(0x333333));
-        const sunLight = new THREE.DirectionalLight(0xffffff, 1.8);
-        sunLight.position.copy(sunMesh.position);
-        scene.add(sunLight);
-
-        const sunGroup = new THREE.Group();
-        sunGroup.position.copy(sunLight.position);
-        scene.add(sunGroup);
-
-        const sunGeo = new THREE.SphereGeometry(3, 32, 32);
-        const sunMat = new THREE.MeshBasicMaterial({ color: 0xffddaa });
-        const sunCore = new THREE.Mesh(sunGeo, sunMat);
-        sunGroup.add(sunCore);
-
-        const textureLoader = new THREE.TextureLoader();
-        const spriteMaterial = new THREE.SpriteMaterial({
-            map: textureLoader.load('https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/sprites/glow.png'),
-            color: 0xffaa00,
-            transparent: true,
-            blending: THREE.AdditiveBlending,
-            opacity: 0.8
-        });
-        sunSprite = new THREE.Sprite(spriteMaterial);
-        sunSprite.scale.set(35, 35, 1.0);
-        sunGroup.add(sunSprite);
-
         moonGroup = new THREE.Group();
         scene.add(moonGroup);
-
         const moonGeo = new THREE.SphereGeometry(1.35, 32, 32);
         const moonMat = new THREE.MeshStandardMaterial({
-            map: textureLoader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg'),
+            map: texLoad.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg'),
             roughness: 0.8,
             metalness: 0.1
         });
@@ -640,12 +740,15 @@
         moonMesh.position.set(20, 0, 0);
         moonGroup.add(moonMesh);
 
+        scene.add(new THREE.AmbientLight(0x333333));
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1.8);
+        sunLight.position.set(150, 80, 150);
+        scene.add(sunLight);
+
         markerGroup = new THREE.Group();
         globeGroup.add(markerGroup);
 
         animate();
-
-        console.log('✅ Three.js initialized');
         threeJSReady = true;
         checkAndHideSplash();
     }
@@ -663,78 +766,39 @@
         const start = latLonToPos(origin.lat, origin.lon, 5.05);
         const end = latLonToPos(dest.lat, dest.lon, 5.05);
         const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-        const distance = start.distanceTo(end);
-        mid.setLength(5.05 + distance * 0.4);
+        mid.setLength(5.05 + start.distanceTo(end) * 0.4);
         const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
         const points = curve.getPoints(50);
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        const material = new THREE.LineBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.6, linewidth: 2 });
-        const line = new THREE.Line(geometry, material);
-        markerGroup.add(line);
+        const material = new THREE.LineBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.6 });
+        markerGroup.add(new THREE.Line(geometry, material));
     }
 
     function renderMarkers() {
-        console.log('🎯 renderMarkers() called, trips count:', Object.keys(trips).length);
-        console.log('Trips data:', trips);
-
-        if (!markerGroup) {
-            console.error('❌ markerGroup not initialized!');
-            return;
-        }
-
-        // Remove only markers, keep flight path lines
+        if (!markerGroup) return;
         const toRemove = [];
         markerGroup.children.forEach(child => {
-            // Remove spheres (markers) but keep lines (flight paths)
-            if (child.type === 'Mesh' && child.geometry?.type === 'SphereGeometry') {
-                toRemove.push(child);
-            }
+            if (child.type === 'Mesh' && child.geometry?.type === 'SphereGeometry') toRemove.push(child);
         });
         toRemove.forEach(child => markerGroup.remove(child));
-        console.log(`Removed ${toRemove.length} old markers`);
 
-        // Add new markers
-        let addedCount = 0;
         Object.keys(trips).forEach(key => {
             const t = trips[key];
-            console.log(`Adding marker for trip ${key}:`, t);
-
-            if (!t.lat || !t.lon) {
-                console.warn(`⚠️ Trip ${key} missing coordinates`);
-                return;
-            }
-
-            const m = new THREE.Mesh(
-                new THREE.SphereGeometry(0.12, 16, 16),
-                new THREE.MeshBasicMaterial({ color: 0x22d3ee })
-            );
+            if (!t.lat || !t.lon) return;
+            const m = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), new THREE.MeshBasicMaterial({ color: 0x22d3ee }));
             m.position.copy(latLonToPos(t.lat, t.lon, 5.05));
             m.userData = { key };
             markerGroup.add(m);
-            addedCount++;
         });
 
-        console.log(`✅ Added ${addedCount} markers to globe`);
         const statCount = document.getElementById('stat-count');
-        if (statCount) {
-            statCount.innerText = Object.keys(trips).length;
-            console.log('Updated stat-count to:', Object.keys(trips).length);
-        } else {
-            console.error('❌ stat-count element not found!');
-        }
+        if (statCount) statCount.innerText = Object.keys(trips).length;
     }
 
     function renderAllFlightPaths() {
-        // Remove all existing flight paths (lines)
         const toRemove = [];
-        markerGroup.children.forEach(child => {
-            if (child.type === 'Line') {
-                toRemove.push(child);
-            }
-        });
+        markerGroup.children.forEach(child => { if (child.type === 'Line') toRemove.push(child); });
         toRemove.forEach(child => markerGroup.remove(child));
-
-        // Redraw flight paths for all trips that have origin data
         Object.keys(trips).forEach(key => {
             const trip = trips[key];
             if (trip.origin && trip.title && cityDatabase[trip.origin] && cityDatabase[trip.title]) {
@@ -748,15 +812,7 @@
         TWEEN.update();
         if(controls) controls.update();
         if(stars) stars.rotation.y -= 0.0001;
-        if (moonGroup) {
-            moonGroup.rotation.y += 0.0015;
-            moonGroup.rotation.x = Math.sin(t * 0.0001) * 0.2;
-        }
-        if (sunSprite) {
-            const scale = 35 + Math.sin(t * 0.002) * 2;
-            sunSprite.scale.set(scale, scale, 1.0);
-        }
-        if(earthMaterial) earthMaterial.emissiveIntensity = 0.3 + Math.sin(t * 0.001) * 0.1;
+        if(moonGroup) moonGroup.rotation.y += 0.0015;
         if(renderer && scene && camera) renderer.render(scene, camera);
     }
 
@@ -774,199 +830,69 @@
         document.getElementById(`count-${type}`).innerText = passengerCounts[type];
     }
 
-    function setSearchLoading(isLoading) {
-        const btn = document.getElementById('btn-search-trigger');
-        if (!btn) return;
-        if (isLoading) {
-            btn.disabled = true;
-            btn.innerHTML = `<div class="flex items-center justify-center gap-2"><div class="loading-ring"></div> SUCHE...</div>`;
-        } else {
-            btn.disabled = false;
-            btn.innerText = "FLÜGE SUCHEN";
-        }
-    }
-
-    function handleSearchResults(data) {
-        const origin = data?.origin || lastSearchContext?.origin;
-        const dest = data?.destination || lastSearchContext?.destination;
-        setSearchLoading(false);
-
-        while(markerGroup.children.length > 0) markerGroup.remove(markerGroup.children[0]);
-
-        if (data?.success && Array.isArray(data.flights) && data.flights.length) {
-            const normalizedFlights = data.flights.map(f => {
-                const priceVal = typeof f.price === 'number' ? formatEuro(f.price) : (f.price || '');
-                return {
-                    airline: f.airline || 'Airline',
-                    price: priceVal,
-                    departure: f.departure || '',
-                    duration: f.duration || ''
-                };
-            });
-            renderResults(normalizedFlights, dest, origin);
-            drawFlightPath(origin, dest);
-            flyTo(cityDatabase[dest]?.lat || 0, cityDatabase[dest]?.lon || 0);
-        } else {
-            mockSearch(dest, origin);
-        }
-    }
-
-    // --- BRIDGING (QT / FLASK) ---
-    function initWebChannel() {
-        if (typeof qt === 'undefined' || typeof QWebChannel === 'undefined') {
-            console.log('Qt WebChannel nicht verfügbar - läuft als Web-Version');
-            return;
-        }
-        try {
-            new QWebChannel(qt.webChannelTransport, (channel) => {
-                window.backend = channel.objects.backend;
-
-                // Connect resultsReady signal for flight search
-                if (window.backend?.resultsReady?.connect) {
-                    window.backend.resultsReady.connect((payload) => {
-                        console.log('Qt Signal empfangen:', payload);
-                        handleSearchResults(payload || {});
-                    });
-                }
-
-                // Connect dataLoaded signal for persistent data
-                if (window.backend?.dataLoaded?.connect) {
-                    window.backend.dataLoaded.connect((data) => {
-                        console.log('📦 dataLoaded signal received');
-                        handleDataLoaded(data);
-                    });
-                    console.log('✅ dataLoaded signal handler connected');
-                }
-
-                qtChannelReady = true;
-                console.info('Qt WebChannel erfolgreich verbunden');
-
-                // Request data load from backend
-                console.log('🔄 Requesting data load...');
-                loadData();
-            });
-        } catch (e) {
-            console.error('Qt WebChannel Initialisierung fehlgeschlagen:', e);
-            // Fallback to localStorage if WebChannel fails
-            loadData();
-        }
-    }
-
     async function performSearch() {
         const origin = document.getElementById('input-origin').value.trim().toUpperCase();
         const dest = document.getElementById('input-dest').value.trim().toUpperCase();
         const date = document.getElementById('input-start').value;
 
-        if (!origin || !dest || !date) {
-            showToast('Bitte alle Felder ausfüllen');
-            return;
-        }
+        if (!origin || !dest || !date) { showToast('Bitte alle Felder ausfüllen'); return; }
 
         lastSearchContext = { origin, destination: dest, date };
         setSearchLoading(true);
 
-        // Fall A: Desktop (Qt)
-        if (qtChannelReady && window.backend) {
-            console.log('Suche über Qt Backend:', { origin, dest, date, passengerCounts });
-            try {
-                if (typeof window.backend.search_flights === 'function') {
-                    window.backend.search_flights(origin, dest, date, passengerCounts);
-                } else {
-                    console.error('search_flights Methode nicht gefunden');
-                    showToast('Desktop-Backend-Fehler');
-                    setSearchLoading(false);
-                }
-            } catch (e) {
-                console.error('Qt Backend Fehler:', e);
-                showToast('Fehler beim Aufruf des Backends');
-                setSearchLoading(false);
-            }
-            return;
-        }
-
-        // Fall B: Web (Flask)
-        console.log('Suche über Flask API:', { origin, dest, date });
         try {
-            const res = await fetch('/api/search', {
+            const response = await fetch('/api/search', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ origin, destination: dest, date, passengers: passengerCounts })
             });
-            const data = await res.json();
-            handleSearchResults({ ...data, origin, destination: dest });
+            const data = await response.json();
+            if (data.success) {
+                renderResults(data.flights, dest, origin);
+                drawFlightPath(origin, dest);
+            } else {
+                showToast(data.error || 'Suche fehlgeschlagen');
+            }
         } catch (e) {
             console.error('Search error:', e);
-            showToast('Fehler bei der Suche, zeige Beispielergebnisse');
-            mockSearch(dest, origin);
+            showToast('Verbindungsfehler');
+        } finally {
+            setSearchLoading(false);
         }
-    }
-
-    function mockSearch(cityName, originName) {
-        const dummyData = [
-            { airline: 'Lufthansa', price: '420€', departure: '10:30', duration: '11h 20m' },
-            { airline: 'Emirates', price: '389€', departure: '21:15', duration: '13h 05m' }
-        ];
-        renderResults(dummyData, cityName, originName);
-        drawFlightPath(originName, cityName);
-        setSearchLoading(false);
-    }
-
-    function formatEuro(n) {
-        return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
     }
 
     function renderResults(flights, cityName, originName) {
         const area = document.getElementById('search-results-area');
         const list = document.getElementById('results-list');
         area.classList.remove('hidden');
-        area.classList.add('enter-pop');
         list.innerHTML = '';
 
-        flights.forEach((f, idx) => {
-            const priceNum = parsePriceToNumber(f.price);
-            const priceDisplay = f.price ?? '';
+        if (!flights || flights.length === 0) {
+            list.innerHTML = '<p class="text-slate-400 text-center py-4">Keine Flüge gefunden</p>';
+            return;
+        }
 
+        flights.forEach((f) => {
+            const priceDisplay = typeof f.price === 'number' ? f.price + ' €' : f.price;
             list.innerHTML += `
-                <div class="flight-result-card enter-pop" style="animation-delay:${Math.min(idx * 40, 240)}ms">
+                <div class="flight-result-card enter-pop">
                     <div class="flex items-center gap-4">
                         <div class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center font-black text-cyan-400 border border-slate-700">${f.airline.substring(0,2)}</div>
-                        <div>
-                            <p class="font-bold text-white text-sm">${f.airline}</p>
-                            <p class="text-[9px] text-slate-500 uppercase">${f.departure} • ${f.duration}</p>
-                        </div>
+                        <div><p class="font-bold text-white text-sm">${f.airline}</p><p class="text-[9px] text-slate-500 uppercase">${f.departure} • ${f.duration}</p></div>
                     </div>
                     <div class="text-right flex items-center gap-4">
-                        <div class="min-w-[92px]">
-                            <p class="text-lg font-black text-white">${priceDisplay}</p>
-                            <p class="text-[9px] text-slate-400 uppercase tracking-widest font-bold">aktueller Preis</p>
-                        </div>
-                        <div class="flex flex-col gap-2">
-                            <button data-ripple="true" onclick="saveTrip('${cityName}', '${f.airline}', '${priceDisplay}', '${originName}')" class="px-3 py-1 bg-cyan-500 text-slate-900 rounded-lg font-black text-[9px] uppercase">Planen</button>
-
-                            <div class="flex items-center gap-2 justify-end">
-                                <input id="alert-${cityName}-${idx}" inputmode="numeric" placeholder="Zielpreis" class="search-input" style="padding:0.45rem 0.6rem;border-radius:0.9rem;width:110px;font-size:0.75rem" />
-                                <button data-ripple="true" onclick="addAlertFromResult('${cityName}', '${priceDisplay}', 'alert-${cityName}-${idx}')" class="px-3 py-1 border border-slate-700 rounded-lg font-black text-[9px] uppercase">Alarm</button>
-                            </div>
-                        </div>
+                        <div><p class="text-lg font-black text-white">${priceDisplay}</p><p class="text-[9px] text-slate-400 uppercase font-bold">aktuell</p></div>
+                        <button onclick="saveTrip('${cityName}', '${f.airline}', '${priceDisplay}', '${originName}')" class="px-4 py-2 bg-cyan-500 text-slate-900 rounded-lg font-black text-[9px] uppercase">Planen</button>
                     </div>
                 </div>
             `;
-
-            // Check existing alerts for this destination against this flight price
-            if (typeof priceNum === 'number') {
-                checkAlertsForDestination(cityName, priceNum, `${f.airline} • ${f.departure}`);
-            }
         });
-
-        // Ripple for dynamically created buttons
-        list.querySelectorAll('[data-ripple="true"]').forEach(attachRipple);
-        showToast('Ergebnisse aktualisiert');
     }
 
     function saveTrip(dest, airline, priceText, origin) {
         const id = 't_' + Date.now();
         const coords = cityDatabase[dest] || { lat: 0, lon: 0 };
-        trips[id] = {
+        const tripData = {
             title: dest,
             origin: origin,
             date: (new Date()).toLocaleDateString('de-DE', { month: 'short', year: 'numeric' }).toUpperCase(),
@@ -978,13 +904,14 @@
                 { title: 'Planung', desc: 'Hotel-Recherche aktiv' }
             ]
         };
-        persistState();
-        renderMarkers();
-        renderPlanning();
 
-        // Draw flight path if origin is known
-        if (origin && dest && cityDatabase[origin] && cityDatabase[dest]) {
-            drawFlightPath(origin, dest);
+        if (currentUser && db) {
+            saveTripToFirestore(id, tripData);
+        } else {
+            trips[id] = tripData;
+            persistState();
+            renderMarkers();
+            renderPlanning();
         }
 
         hideAddTripModal();
@@ -992,294 +919,38 @@
         showToast('Trip gespeichert');
     }
 
-    // --- PRICE ALERT FUNCTIONS ---
-    function parsePriceToNumber(priceText) {
-        if (!priceText) return null;
-        // Accept formats like "420€", "€420", "1.299€", "1,299.50 €"
-        const cleaned = String(priceText)
-            .replace(/\s/g, '')
-            .replace(/€/g, '')
-            .replace(/EUR/ig, '')
-            .replace(/\.(?=\d{3}(\D|$))/g, '') // remove thousand separators like 1.299
-            .replace(/,(?=\d{2}(\D|$))/g, '.'); // convert decimal comma to dot
-
-        const num = Number(cleaned.replace(/[^0-9.]/g, ''));
-        return Number.isFinite(num) ? num : null;
-    }
-
-    function formatEuro(n) {
-        if (typeof n !== 'number' || !Number.isFinite(n)) return '';
-        try {
-            return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
-        } catch {
-            return `${Math.round(n)}€`;
-        }
-    }
-
-    function notifyPriceHit(alert, currentPriceNumber, contextText) {
-        // de-dup: only notify once per alert until it goes above target again
-        if (alert?.notifiedAt && alert?.lastSeenPrice != null && alert.lastSeenPrice <= alert.targetPrice) {
-            return;
-        }
-
-        alert.notifiedAt = Date.now();
-        alert.lastSeenPrice = currentPriceNumber;
-
-        // UI signals
-        document.getElementById('notif-badge').classList.remove('hidden');
-        showToast(`Preisalarm: ${alert.dest} jetzt ${formatEuro(currentPriceNumber)}!`);
-
-        // Push to notification feed
-        const notif = {
-            id: Date.now() + Math.random(),
-            type: 'price_hit',
-            title: 'Preisalarm erreicht',
-            message: `${alert.dest}: ${formatEuro(currentPriceNumber)} ≤ ${formatEuro(alert.targetPrice)}${contextText ? ' • ' + contextText : ''}`,
-            ts: Date.now()
-        };
-
-        window.__tfNotifs = window.__tfNotifs || [];
-        window.__tfNotifs.unshift(notif);
-        renderNotifications();
-    }
-
-    function renderNotifications() {
-        const container = document.getElementById('notif-content');
-        if (!container) return;
-        const notifs = window.__tfNotifs || [];
-
-        if (!notifs.length) {
-            container.innerHTML = '<div class="p-4 text-slate-400 text-sm">Keine neuen Benachrichtigungen</div>';
-            return;
-        }
-
-        container.innerHTML = '';
-        notifs.slice(0, 15).forEach(n => {
-            const date = new Date(n.ts);
-            const time = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-            container.innerHTML += `
-                <div class="p-4 hover:bg-slate-700/50 rounded-xl cursor-pointer transition">
-                    <span class="text-cyan-400 text-[10px] font-bold uppercase tracking-widest">${n.title} • ${time}</span>
-                    <p class="text-sm mt-1 text-slate-200">${n.message}</p>
-                </div>
-            `;
-        });
-    }
-
-    function addAlertFromResult(dest, currentPriceText, inputId) {
-        const input = document.getElementById(inputId);
-        const raw = input ? input.value : '';
-        const target = parsePriceToNumber(raw);
-        const current = parsePriceToNumber(currentPriceText);
-
-        if (target == null || target <= 0) {
-            showToast('Bitte einen gültigen Zielpreis eingeben');
-            if (input) input.focus();
-            return;
-        }
-
-        addAlert(dest, target, current);
-        if (input) input.value = '';
-    }
-
-    function addAlert(dest, targetPriceNumber, currentPriceNumber) {
-        // Prevent duplicates for same destination + target
-        const exists = priceAlerts.some(a => a.dest === dest && a.targetPrice === targetPriceNumber);
-        if (exists) {
-            showToast('Preisalarm existiert schon');
-            return;
-        }
-
-        priceAlerts.push({
-            id: Date.now(),
-            dest,
-            targetPrice: targetPriceNumber,
-            createdAt: Date.now(),
-            lastSeenPrice: typeof currentPriceNumber === 'number' ? currentPriceNumber : null,
-            notifiedAt: null
-        });
-
-        persistState(); // Save
-
-        document.getElementById('notif-badge').classList.remove('hidden');
-        showToast(`Preisalarm gesetzt: ${dest} ≤ ${formatEuro(targetPriceNumber)}`);
-        renderAlerts();
-
-        // immediate hit check (if we know the current price)
-        if (typeof currentPriceNumber === 'number' && currentPriceNumber <= targetPriceNumber) {
-            const alert = priceAlerts.find(a => a.dest === dest && a.targetPrice === targetPriceNumber);
-            if (alert) notifyPriceHit(alert, currentPriceNumber, 'Sofort-Treffer');
-        }
-    }
-
-    function deleteAlert(alertId) {
-        priceAlerts = priceAlerts.filter(a => a.id !== alertId);
-        persistState(); // Save
-        renderAlerts();
-        showToast('Preisalarm entfernt');
-    }
-
-    function checkAlertsForDestination(dest, currentPriceNumber, contextText) {
-        if (!priceAlerts?.length) return;
-        let changed = false;
-        priceAlerts
-            .filter(a => a.dest === dest)
-            .forEach(a => {
-                a.lastSeenPrice = currentPriceNumber;
-                // reset notified state if price went above target again (so future drops can notify)
-                if (a.notifiedAt && currentPriceNumber > a.targetPrice) {
-                    a.notifiedAt = null;
-                }
-                if (currentPriceNumber <= a.targetPrice) {
-                    notifyPriceHit(a, currentPriceNumber, contextText);
-                }
-                changed = true; // prices updated
-            });
-
-        if (changed) persistState();
-    }
-
-    function renderAlerts() {
-        const c = document.getElementById('alerts-container');
-        if (!c) return;
-
-        c.innerHTML = priceAlerts.length
-            ? ''
-            : '<p class="text-center col-span-full py-20 text-slate-500 font-bold uppercase text-xs tracking-widest">Keine Preisalarme gesetzt</p>';
-
-        priceAlerts
-            .slice()
-            .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-            .forEach(a => {
-                const last = typeof a.lastSeenPrice === 'number' ? formatEuro(a.lastSeenPrice) : '—';
-                const target = formatEuro(a.targetPrice);
-                const status = (typeof a.lastSeenPrice === 'number')
-                    ? (a.lastSeenPrice <= a.targetPrice ? 'Treffer' : 'Warten')
-                    : 'Aktiv';
-
-                c.innerHTML += `
-                    <div class="glass-card rounded-3xl p-7 flex flex-col gap-4">
-                        <div class="flex items-start justify-between gap-4">
-                            <div class="flex items-center gap-4">
-                                <div class="w-12 h-12 bg-cyan-500/15 text-cyan-300 rounded-full flex items-center justify-center border border-cyan-400/20">
-                                    <span class="material-symbols-outlined">notifications_active</span>
-                                </div>
-                                <div>
-                                    <h3 class="font-black text-2xl text-white">${a.dest}</h3>
-                                    <p class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Zielpreis ≤ ${target}</p>
-                                </div>
-                            </div>
-                            <button data-ripple="true" onclick="deleteAlert(${a.id})" class="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition">
-                                <span class="material-symbols-outlined text-slate-200" style="font-size:20px">delete</span>
-                            </button>
-                        </div>
-
-                        <div class="grid grid-cols-3 gap-3">
-                            <div class="bg-slate-900/30 border border-white/10 rounded-2xl p-4">
-                                <p class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Letzter Preis</p>
-                                <p class="text-lg font-black text-white mt-1">${last}</p>
-                            </div>
-                            <div class="bg-slate-900/30 border border-white/10 rounded-2xl p-4">
-                                <p class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Ziel</p>
-                                <p class="text-lg font-black text-white mt-1">${target}</p>
-                            </div>
-                            <div class="bg-slate-900/30 border border-white/10 rounded-2xl p-4">
-                                <p class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Status</p>
-                                <p class="text-lg font-black ${status==='Treffer' ? 'text-cyan-300' : 'text-slate-200'} mt-1">${status}</p>
-                            </div>
-                        </div>
-
-                        <div class="flex items-center justify-between">
-                            <p class="text-[10px] text-slate-500 uppercase font-black tracking-widest">Wir benachrichtigen dich, sobald der Preis erreicht ist.</p>
-                            <button data-ripple="true" onclick="showToast('Tipp: Suche erneut, um Preise zu aktualisieren')" class="px-3 py-1 rounded-lg border border-slate-700 font-black text-[9px] uppercase">Info</button>
-                        </div>
-                    </div>
-                `;
-            });
-
-        c.querySelectorAll('[data-ripple="true"]').forEach(attachRipple);
-    }
-
-    // --- NAVIGATION & VIEWS ---
+    // --- NAVIGATION ---
     function switchView(view) {
         const home = document.getElementById('view-home');
         const tripsView = document.getElementById('view-trips');
-        const navHome = document.getElementById('nav-home');
-        const navTrips = document.getElementById('nav-trips');
-
         if (view === 'trips') {
-            home.classList.add('opacity-0'); setTimeout(() => home.classList.add('hidden'), 300);
-            tripsView.classList.remove('hidden'); setTimeout(() => tripsView.classList.remove('opacity-0'), 10);
-            navHome.classList.replace('text-cyan-400', 'text-slate-500');
-            navTrips.classList.replace('text-slate-500', 'text-cyan-400');
-            toggleTripTab('trips'); // default to trips tab
+            home.classList.add('hidden'); tripsView.classList.remove('hidden');
+            setTimeout(() => tripsView.classList.remove('opacity-0'), 10);
             controls.autoRotate = false;
         } else {
-            tripsView.classList.add('opacity-0'); setTimeout(() => tripsView.classList.add('hidden'), 300);
-            home.classList.remove('hidden'); setTimeout(() => home.classList.remove('opacity-0'), 10);
-            navHome.classList.replace('text-slate-500', 'text-cyan-400');
-            navTrips.classList.replace('text-cyan-400', 'text-slate-500');
+            tripsView.classList.add('hidden'); home.classList.remove('hidden');
             controls.autoRotate = true;
         }
     }
 
-    function toggleTripTab(tab) {
-        const tabTrips = document.getElementById('tab-trips');
-        const tabAlerts = document.getElementById('tab-alerts');
-        const tripsContainer = document.getElementById('trips-container');
-        const alertsContainer = document.getElementById('alerts-container');
-
-        if (!tabTrips || !tabAlerts || !tripsContainer || !alertsContainer) return;
-
-        const activeClass = 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm transition-all';
-        const inactiveClass = 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm transition-all';
-
-        tabTrips.className = (tab === 'trips') ? activeClass : inactiveClass;
-        tabAlerts.className = (tab === 'alerts') ? activeClass : inactiveClass;
-
-        tripsContainer.classList.toggle('hidden', tab !== 'trips');
-        alertsContainer.classList.toggle('hidden', tab !== 'alerts');
-
-        if (tab === 'alerts') {
-            renderAlerts();
-        } else {
-            renderPlanning();
-        }
-    }
-
     function renderPlanning() {
-        console.log('📋 renderPlanning() called');
         const c = document.getElementById('trips-container');
-
-        if (!c) {
-            console.error('❌ trips-container element not found!');
-            return;
-        }
-
+        if (!c) return;
         const keys = Object.keys(trips);
-        console.log(`Found ${keys.length} trips to render:`, keys);
-
         if (!keys.length) {
-            c.innerHTML = '<div class="col-span-full text-center py-20 text-slate-500 font-bold uppercase text-xs tracking-widest">Noch keine Reisen geplant</div>';
-            console.log('No trips to display');
+            c.innerHTML = '<div class="col-span-full text-center py-20 text-slate-500 font-bold uppercase text-xs">Noch keine Reisen geplant</div>';
             return;
         }
-
         c.innerHTML = '';
         keys.forEach(k => {
             const t = trips[k];
-            console.log(`Rendering trip ${k}:`, t);
             c.innerHTML += `
-                <div class="glass-card rounded-3xl overflow-hidden cursor-pointer enter-pop" onclick="openDetail('${k}'); flyTo(${t.lat}, ${t.lon})">
+                <div class="glass-card rounded-3xl overflow-hidden cursor-pointer" onclick="openDetail('${k}'); flyTo(${t.lat}, ${t.lon})">
                     <img src="${t.img}" class="h-40 w-full object-cover">
-                    <div class="p-6">
-                        <h3 class="font-black text-xl text-white">${t.title}</h3>
-                        <p class="text-xs text-slate-400 uppercase font-bold tracking-widest">${t.date}</p>
-                    </div>
+                    <div class="p-6"><h3 class="font-black text-xl text-white">${t.title}</h3><p class="text-xs text-slate-400 uppercase font-bold tracking-widest">${t.date}</p></div>
                 </div>
             `;
         });
-        console.log(`✅ Rendered ${keys.length} trip cards to DOM`);
     }
 
     function openDetail(k) {
@@ -1296,154 +967,50 @@
         document.getElementById('detail-sheet').classList.add('open');
     }
 
-    function closeDetail() { document.getElementById('detail-sheet').classList.remove('open'); controls.autoRotate = true; }
-    function deleteCurrentTrip() {
-        delete trips[currentDetailKey]; persistState();
-        renderMarkers(); renderPlanning(); closeDetail(); showToast('Reise entfernt');
+    function closeDetail() { document.getElementById('detail-sheet').classList.remove('open'); }
+    async function deleteCurrentTrip() {
+        if (currentUser && db) {
+            await deleteTripFromFirestore(currentDetailKey);
+        } else {
+            delete trips[currentDetailKey];
+            persistState();
+            renderMarkers(); renderPlanning();
+        }
+        closeDetail(); showToast('Reise entfernt');
     }
 
-    function showAddTripModal() {
-        const modal = document.getElementById('add-trip-modal');
-        modal.classList.remove('hidden'); setTimeout(() => modal.classList.remove('opacity-0'), 10);
-    }
-
-    function hideAddTripModal() {
-        const modal = document.getElementById('add-trip-modal');
-        modal.classList.add('opacity-0'); setTimeout(() => modal.classList.add('hidden'), 300);
-    }
-
-    // --- Microinteractions (Material-ish ripple + toast) ---
-    function attachRipple(el) {
-        if (!el) return;
-        el.addEventListener('click', (e) => {
-            // Skip if disabled
-            if (el.disabled) return;
-            const rect = el.getBoundingClientRect();
-            const size = Math.max(rect.width, rect.height);
-            const x = e.clientX - rect.left - size / 2;
-            const y = e.clientY - rect.top - size / 2;
-
-            const ripple = document.createElement('span');
-            ripple.className = 'ripple';
-            ripple.style.width = ripple.style.height = size + 'px';
-            ripple.style.left = x + 'px';
-            ripple.style.top = y + 'px';
-
-            el.appendChild(ripple);
-            ripple.addEventListener('animationend', () => ripple.remove());
-        }, { passive: true });
-    }
-
-    let toastTimer = null;
-    function showToast(message) {
-        const toast = document.getElementById('toast');
-        const text = document.getElementById('toast-text');
-        if (!toast || !text) return;
-        text.textContent = message;
-        toast.classList.add('show');
-        clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
-    }
+    function showAddTripModal() { document.getElementById('add-trip-modal').classList.remove('hidden'); setTimeout(() => document.getElementById('add-trip-modal').classList.remove('opacity-0'), 10); }
+    function hideAddTripModal() { document.getElementById('add-trip-modal').classList.add('hidden'); }
+    function showToast(m) { const t = document.getElementById('toast'); document.getElementById('toast-text').innerText = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2200); }
+    function setSearchLoading(l) { document.getElementById('btn-search-trigger').innerText = l ? "SUCHE..." : "FLÜGE SUCHEN"; }
 
     function checkAndHideSplash() {
-        const elapsed = Date.now() - splashStartTime;
-        const minTimeRemaining = Math.max(0, MIN_SPLASH_TIME - elapsed);
-
-        console.log('🔍 Checking if app is ready:', {
-            threeJSReady,
-            dataReady,
-            appReady,
-            elapsed: `${elapsed}ms`,
-            minTime: `${MIN_SPLASH_TIME}ms`,
-            waiting: `${minTimeRemaining}ms`
-        });
-
         if (threeJSReady && dataReady && !appReady) {
-            // Wait for minimum splash time before hiding
+            const elapsed = Date.now() - splashStartTime;
             setTimeout(() => {
                 appReady = true;
-                console.log('✅ All components ready - hiding splash screen');
-                hideSplashScreen();
-            }, minTimeRemaining);
-        }
-    }
-
-    function hideSplashScreen() {
-        const splash = document.getElementById('splash-screen');
-        if (splash) {
-            splash.classList.add('fade-out');
-            setTimeout(() => {
-                splash.style.display = 'none';
-                console.log('🎉 Splash screen hidden - App ready!');
-            }, 800);
-            setTimeout(() => {
-                console.log('🎉 Earth starting to rotate!');
+                document.getElementById('splash-screen').classList.add('fade-out');
                 controls.autoRotate = true;
-            }, 500);
+            }, Math.max(0, MIN_SPLASH_TIME - elapsed));
         }
-
-
     }
 
     function flyTo(lat, lon) {
         if (!camera || !controls) return;
-        controls.autoRotate = false;
         const targetPos = latLonToPos(lat, lon, camera.position.length());
-        new TWEEN.Tween(camera.position)
-            .to({ x: targetPos.x, y: targetPos.y, z: targetPos.z }, 1500)
-            .easing(TWEEN.Easing.Cubic.InOut)
-            .onUpdate(() => camera.lookAt(0, 0, 0))
-            .start();
+        new TWEEN.Tween(camera.position).to({ x: targetPos.x, y: targetPos.y, z: targetPos.z }, 1500).easing(TWEEN.Easing.Cubic.InOut).onUpdate(() => camera.lookAt(0, 0, 0)).start();
     }
 
     // --- INIT ---
     document.addEventListener('DOMContentLoaded', () => {
-        console.log('🚀 DOM Content Loaded - App starting...');
-        splashStartTime = Date.now(); // Reset start time to DOMContentLoaded
-
-        const bar = document.getElementById('splash-bar');
-
-        // Animate loading bar
+        splashStartTime = Date.now();
+        document.getElementById('splash-bar').style.width = "100%";
         setTimeout(() => {
-            if (bar) bar.style.width = "40%";
-        }, 200);
-
-        setTimeout(() => {
-            if (bar) bar.style.width = "75%";
-        }, 600);
-
-        setTimeout(() => {
-            if (bar) bar.style.width = "100%";
-        }, 1000);
-
-        // Initialize Three.js first (critical for rendering)
-        setTimeout(() => {
-            console.log('🎨 Initializing Three.js...');
             initThreeJS();
-
-            // After Three.js is ready, initialize data loading
-            setTimeout(() => {
-                console.log('📊 Starting data initialization...');
-
-                // Load data for web version (localStorage) before WebChannel init
-                // Qt version will reload from backend after WebChannel connects
-                if (typeof qt === 'undefined') {
-                    console.log('🌐 Web version detected - loading from localStorage');
-                    loadData();
-                    // For web version, render immediately after loading
-                    renderMarkers();
-                    renderAllFlightPaths();
-                    renderAlerts();
-                } else {
-                    console.log('🖥️ Desktop version detected - waiting for WebChannel');
-                }
-
-                initWebChannel();
-            }, 200);
-        }, 1200);
+            initFirebase();
+        }, 500);
     });
 
-    // Raycaster für Globe-Picking
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     window.addEventListener('pointerdown', (e) => {
@@ -1458,6 +1025,14 @@
             flyTo(trips[key].lat, trips[key].lon);
         }
     });
+
+    function toggleTripTab(t) {
+        document.getElementById('trips-container').classList.toggle('hidden', t !== 'trips');
+        document.getElementById('alerts-container').classList.toggle('hidden', t !== 'alerts');
+        document.getElementById('tab-trips').className = t === 'trips' ? 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm' : 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm';
+        document.getElementById('tab-alerts').className = t === 'alerts' ? 'px-6 py-2 rounded-lg bg-cyan-500 text-slate-900 font-bold text-sm' : 'px-6 py-2 rounded-lg text-slate-400 font-bold text-sm';
+    }
+    function renderAlerts() {}
 </script>
 </body>
 </html>

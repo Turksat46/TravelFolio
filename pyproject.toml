@@ -5,6 +5,9 @@ description = "Add your description here"
 requires-python = ">=3.13"
 dependencies = [
     "fast-flights>=2.2",
+    "firebase>=4.0.1",
+    "firebase-admin>=7.1.0",
     "flask>=3.1.2",
     "playwright>=1.57.0",
+    "pyinstaller>=6.18.0",
 ]

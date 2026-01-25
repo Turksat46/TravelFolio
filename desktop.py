@@ -8,7 +8,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebChannel import QWebChannel
 
 # Deine Flug-Bibliothek
-from fast_flights import FlightData, Passengers, get_flights
+from fast_flights import FlightData, Passengers, get_flights, search_airport
 
 
 # --- WORKER THREAD ---
@@ -34,6 +34,38 @@ class SearchWorker(QThread):
                 infants_in_seat=int(self.pass_data.get('infants', 0)),
                 infants_on_lap=0
             )
+
+            # Airport-Codes validieren und konvertieren
+            # Wenn bereits 3-stelliger Code, verwenden wir ihn direkt
+            if len(self.origin) == 3:
+                print(f"Verwende Origin-Code direkt: {self.origin}")
+            else:
+                print(f"Suche Flughafen für Origin: {self.origin}")
+                origin_results = search_airport(self.origin)
+                print(f"Gefundene Origin-Flughäfen: {origin_results}")
+                if not origin_results:
+                    raise ValueError(
+                        f"Kein Flughafen gefunden für: {self.origin}\n"
+                        f"Bitte verwenden Sie den 3-stelligen IATA-Code.\n"
+                        f"Beispiele: FRA (Frankfurt), JFK (New York), LHR (London)"
+                    )
+                self.origin = origin_results[0].value  # .value um den String aus dem Enum zu holen
+                print(f"Verwende Origin-Code: {self.origin}")
+
+            if len(self.destination) == 3:
+                print(f"Verwende Destination-Code direkt: {self.destination}")
+            else:
+                print(f"Suche Flughafen für Destination: {self.destination}")
+                dest_results = search_airport(self.destination)
+                print(f"Gefundene Destination-Flughäfen: {dest_results}")
+                if not dest_results:
+                    raise ValueError(
+                        f"Kein Flughafen gefunden für: {self.destination}\n"
+                        f"Bitte verwenden Sie den 3-stelligen IATA-Code.\n"
+                        f"Beispiele: NRT (Tokyo Narita), HND (Tokyo Haneda), CDG (Paris)"
+                    )
+                self.destination = dest_results[0].value  # .value um den String aus dem Enum zu holen
+                print(f"Verwende Destination-Code: {self.destination}")
 
             flight_data = [FlightData(
                 date=self.date,
@@ -182,6 +214,8 @@ class TravelFolioApp(QMainWindow):
         settings.setAttribute(QWebEngineSettings.WebAttribute.WebGLEnabled, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows, True)
 
         # WebChannel-Setup
         self.channel = QWebChannel()
