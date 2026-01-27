@@ -17,8 +17,8 @@ Diese Dokumentation beschreibt die Funktionsweise und Nutzung der TravelFolio Ap
     - Für die Web-App: Wähle "Run 'main.py'" aus dem Dropdown
     - Für die Desktop-App: Wähle "Desktop" aus dem Dropdown
 4. (optional) Füge die erforderlichen Firebase-Konfigurationsdateien hinzu, um die Login-Funktion freizuschalten
-    - `firebase_config.json` im 'firebase-key'-Ordner
-    - `travel-e...2.json` im 'static'-Ordner (bereits vorhanden)
+    - `firebase_config.json` im 'static'-Ordner
+    - `travel-e...2.json` im 'firebase-key'-Ordner (bereits vorhanden)
 
 ## Funktionsweise der App
 - Die App ermöglicht es Nutzern, ihre Flugreisen zu planen und zu verwalten.
