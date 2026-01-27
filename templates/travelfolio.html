@@ -350,8 +350,7 @@
     const MIN_SPLASH_TIME = 2500;
 
     const cityDatabase = {
-        "FRA": {lat: 50.03, lon: 8.57}, "LHR": {lat: 51.47, lon: -0.45}, "TYO": {lat: 35.67, lon: 139.65}, "JFK": {lat: 40.64, lon: -73.77},
-        "BER": {lat: 52.36, lon: 13.50}, "CDG": {lat: 49.00, lon: 2.55}, "DXB": {lat: 25.25, lon: 55.36}
+        "FRA": {lat: 50.03, lon: 8.57}
     };
 
     // --- UNIVERSAL BRIDGE (QT / FLASK) ---
@@ -780,12 +779,35 @@
 
     function handleSearchResults(data) {
         setSearchLoading(false);
-        if (data.success) {
+       if (data.success) {
+            // --- NEU: Koordinaten vom Backend lernen ---
+            // Wenn das Backend 'coords' mitschickt, speichern wir sie in unserer Datenbank
+            if (data.coords) {
+                Object.keys(data.coords).forEach(iata => {
+                    const c = data.coords[iata];
+                    // Wir speichern nur, wenn wir gültige Koordinaten bekommen haben
+                    if (c && (c.lat !== 0 || c.lon !== 0)) {
+                        cityDatabase[iata] = { lat: c.lat, lon: c.lon };
+                        console.log(`📍 Neue Koordinaten gelernt für ${iata}:`, c);
+                    }
+                });
+            }
+            // -------------------------------------------
+
             renderResults(data.flights, data.destination, data.origin);
-            flyTo(cityDatabase[data.destination]?.lat || 0, cityDatabase[data.destination]?.lon || 0);
+
+            // Jetzt können wir sicher sein, dass cityDatabase das Ziel kennt
+            const destCoords = cityDatabase[data.destination];
+            if (destCoords) {
+                flyTo(destCoords.lat, destCoords.lon);
+            } else {
+                console.warn(`Keine Koordinaten für ${data.destination} gefunden - bleibe auf aktueller Position.`);
+            }
+
         } else {
             showToast(data.error || 'Suche fehlgeschlagen');
         }
+
     }
 
     function renderResults(flights, cityName, originName) {

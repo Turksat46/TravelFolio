@@ -3,6 +3,7 @@ import os
 import json
 import datetime
 import threading
+import airportsdata
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from PySide6.QtCore import QUrl, QStandardPaths, Slot, QObject, Signal, QThread
 from PySide6.QtGui import QIcon
@@ -53,12 +54,13 @@ else:
 class SearchWorker(QThread):
     finished = Signal(dict)
 
-    def __init__(self, origin, destination, date, pass_data):
+    def __init__(self, origin, destination, date, pass_data, airports_db):
         super().__init__()
         self.origin = origin
         self.destination = destination
         self.date = date
         self.pass_data = pass_data
+        self.airports_db = airports_db
 
     def run(self):
         try:
@@ -108,12 +110,25 @@ class SearchWorker(QThread):
                         'duration': flight.duration,
                         'stops': flight.stops,
                     })
+            #Airport coords
+            coords = {}
+
+            if current_origin in self.airports_db:
+                apt = self.airports_db[current_origin]
+                coords[current_origin] = {'lat': apt['lat'], 'lon': apt['lon']}
+
+            if current_dest in self.airports_db:
+                apt = self.airports_db[current_dest]
+                coords[current_dest] = {'lat': apt['lat'], 'lon': apt['lon']}
+
+            print(f" Koordinaten gefunden für: {list(coords.keys())}")
 
             self.finished.emit({
                 'success': True,
                 'origin': current_origin,
                 'destination': current_dest,
-                'flights': flights_list
+                'flights': flights_list,
+                'coords': coords
             })
         except Exception as e:
             print(f"Suche fehlgeschlagen: {str(e)}")
@@ -134,6 +149,11 @@ class Bridge(QObject):
         super().__init__()
         self.current_uid = None
         self.app_id = "travelfolio-3d-001"
+
+        #Flugdatenbank
+        print("Lade Flughafendatenbank...")
+        self.airports = airportsdata.load('IATA')
+        print(f" Datenbank geladen ({len(self.airports)} Flughäfen)")
 
         # Lokaler Datenpfad
         self.data_dir = os.path.join(os.path.expanduser("~"), ".travelfolio")
@@ -206,7 +226,7 @@ class Bridge(QObject):
 
     @Slot(str, str, str, dict)
     def search_flights(self, origin, destination, date, pass_data):
-        self.worker = SearchWorker(origin.upper(), destination.upper(), date, pass_data)
+        self.worker = SearchWorker(origin.upper(), destination.upper(), date, pass_data, self.airports)
         self.worker.finished.connect(self.resultsReady.emit)
         self.worker.start()
 
@@ -431,3 +451,4 @@ if __name__ == "__main__":
     print("✅ App gestartet")
 
     sys.exit(app.exec())
+
