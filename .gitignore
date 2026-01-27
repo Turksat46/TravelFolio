@@ -3,6 +3,7 @@ firebase-key/*
 
 # Static JSON files
 static/*.json
+static/*.js
 
 # Python
 __pycache__/
