@@ -1,0 +1,1 @@
+# Hier kommt die firebase-config.js rein, welche die Firebase Konfiguration enthält.

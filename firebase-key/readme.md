@@ -1,0 +1,1 @@
+# Hier kommt die travel-e...2.json Datei rein, welche die Firebase Konfiguration enthält.
