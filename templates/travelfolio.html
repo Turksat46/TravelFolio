@@ -892,6 +892,26 @@
         showToast('Alarm gesetzt');
     }
 
+    async function deleteAlert(alertId) {
+        const index = priceAlerts.findIndex(a => a.id === alertId);
+        if (index === -1) return;
+
+        if (qtChannelReady && window.backend) {
+            window.backend.delete_alert(alertId);
+        } else {
+            if (currentUser) {
+                await fetch(`/api/alerts/${alertId}`, { method: 'DELETE' });
+            }
+        }
+        
+        priceAlerts.splice(index, 1);
+        if (!currentUser && !qtChannelReady) {
+            localStorage.setItem('tf_alerts', JSON.stringify(priceAlerts));
+        }
+        renderAlerts();
+        showToast('Alarm entfernt');
+    }
+
     // --- VIEW MANAGEMENT ---
     function switchView(view) {
         const home = document.getElementById('view-home');
@@ -940,7 +960,12 @@
         if (!priceAlerts.length) { c.innerHTML = '<div class="col-span-full text-center py-20 text-slate-500 font-bold uppercase text-xs">Keine Alarme</div>'; return; }
         c.innerHTML = priceAlerts.map(a => `
             <div class="glass-card rounded-3xl p-6 flex flex-col gap-3">
-                <div class="flex justify-between items-center"><h3 class="font-black text-white text-xl">${a.dest}</h3><span class="material-symbols-outlined text-slate-500 text-sm">notifications</span></div>
+                <div class="flex justify-between items-center">
+                    <h3 class="font-black text-white text-xl">${a.dest}</h3>
+                    <button onclick="deleteAlert(${a.id})" class="w-8 h-8 rounded-full bg-red-500/20 hover:bg-red-500/40 flex items-center justify-center text-red-400 transition">
+                        <span class="material-symbols-outlined text-sm">delete</span>
+                    </button>
+                </div>
                 <div class="bg-slate-900/50 p-4 rounded-xl border border-white/5"><p class="text-[10px] text-slate-400 uppercase font-bold">Zielpreis</p><p class="text-lg font-black text-cyan-400">≤ ${a.targetPrice}€</p></div>
             </div>
         `).join('');
