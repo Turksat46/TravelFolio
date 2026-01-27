@@ -7,7 +7,13 @@ from firebase_admin import auth, credentials, firestore
 
 import datetime
 
+import airportsdata
+
 app = Flask(__name__)
+
+print("Lade Flughafendatenbank für Web-API...")
+airports_db = airportsdata.load('IATA')
+print(f" Datenbank geladen ({len(airports_db)} Einträge)")
 
 # Firebase Admin SDK Initialisierung
 # Stelle sicher, dass der Pfad zu deinem Key korrekt ist!
@@ -195,7 +201,19 @@ def search():
                     'stops': flight.stops,
                 })
 
-        return jsonify({'success': True, 'origin': origin, 'destination': destination, 'flights': flights_list})
+        coords = {}
+
+        if origin in airports_db:
+            apt = airports_db[origin]
+            coords[origin] = {'lat': apt['lat'], 'lon': apt['lon']}
+
+        if destination in airports_db:
+            apt = airports_db[destination]
+            coords[destination] = {'lat': apt['lat'], 'lon': apt['lon']}
+
+        print(f" Web-API: Koordinaten gefunden: {list(coords.keys())}")
+
+        return jsonify({'success': True, 'origin': origin, 'destination': destination, 'flights': flights_list, 'coords': coords})
     except Exception as e:
         print(e)
         return jsonify({'success': False, 'error': str(e)}), 500
