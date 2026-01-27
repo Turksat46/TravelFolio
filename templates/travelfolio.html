@@ -872,6 +872,7 @@
         }
         renderAll();
         hideAddTripModal();
+        openDetail(id);
         flyTo(coords.lat, coords.lon);
         showToast('Trip gespeichert');
     }
@@ -1006,9 +1007,10 @@
             </div>
         `).join('');
         document.getElementById('detail-sheet').classList.add('open');
+        controls.autoRotate = false;
     }
 
-    function closeDetail() { document.getElementById('detail-sheet').classList.remove('open'); }
+    function closeDetail() { document.getElementById('detail-sheet').classList.remove('open'); controls.autoRotate = true; }
     function showAddTripModal() { document.getElementById('add-trip-modal').classList.remove('hidden'); setTimeout(() => document.getElementById('add-trip-modal').classList.remove('opacity-0'), 10); }
     function hideAddTripModal() { document.getElementById('add-trip-modal').classList.add('hidden'); }
     function showToast(m) { const t = document.getElementById('toast'); document.getElementById('toast-text').innerText = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2200); }
