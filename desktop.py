@@ -134,7 +134,7 @@ class PriceAlertChecker(QThread):
         #def check_single_alert(self, alert_doc, alert_data):
         """Überprüft einen einzelnen Preisalarm"""
         dest = alert_data.get('dest')
-        origin_raw = alert_data.get('origin', 'FRA')
+        origin_raw = alert_data.get('origin')
         target_price = alert_data.get('targetPrice')
         last_seen_price = alert_data.get('lastSeenPrice')
         notified_at = alert_data.get('notifiedAt')
@@ -180,12 +180,7 @@ class PriceAlertChecker(QThread):
         print(f"🔎 CHECK: {current_origin} -> {current_dest} am {trip_date} (Ziel: {target_price}€)")
 
         try:
-            origin = alert_data.get('origin', 'FRA')
-
-            print(f"🔎 Prüfe Alarm: {origin} -> {dest} am {trip_date}")
-
-            # Flugsuche mit dem KORREKTEN Datum
-            flight_data = [FlightData(date=trip_date, from_airport=origin, to_airport=dest)]
+            flight_data = [FlightData(date=trip_date, from_airport=current_origin, to_airport=current_dest)]
             passengers = Passengers(adults=1, children=0, infants_in_seat=0, infants_on_lap=0)
 
             result = get_flights(
@@ -197,24 +192,22 @@ class PriceAlertChecker(QThread):
             )
 
             if result and result.flights and len(result.flights) > 0:
-                # Debugging Ausgabe um zu sehen was wirklich zurückkommt
-                # print(f"   Gefundene Preise: {[f.price for f in result.flights]}")
-
+                # Günstigsten Preis finden
                 cheapest = min(result.flights, key=lambda f: clean_price(f.price) or float('inf'))
                 current_price = clean_price(cheapest.price)
 
                 if current_price is None:
-                    print(f"   ⚠️ Ungültiger Preis von API für {dest}")
                     return
 
-                print(f"   💰 Aktueller Preis: {current_price}€ (Ziel: {target_price}€)")
+                print(f"   💰 Aktueller Preis: {current_price}€")
 
-                # Aktualisiere lastSeenPrice
+                # DB Update vorbereiten
                 update_data = {'lastSeenPrice': current_price}
+                should_notify = False
 
-                # Prüfe, ob Alarm ausgelöst werden soll
+                # Alarm-Logik prüfen
                 if current_price <= target_price:
-                    should_notify = False
+                    # Wenn noch nie benachrichtigt ODER Preis wieder gefallen ist
                     if not notified_at:
                         should_notify = True
                     elif last_seen_price is not None and last_seen_price > target_price:
@@ -223,28 +216,40 @@ class PriceAlertChecker(QThread):
                     if should_notify:
                         update_data['notifiedAt'] = datetime.datetime.now().timestamp()
                         update_data['triggeredPrice'] = current_price
-                        print(f"   ✅ ALARM AUSGELÖST!")
+                        print(f"   🚨 ALARM AUSGELÖST!")
 
-                        # Sende Signal an UI
+                        # Signal an UI senden
                         self.alertTriggered.emit({
                             'dest': dest,
                             'currentPrice': current_price,
                             'targetPrice': target_price,
-                            'date': trip_date, # Sende Datum mit ans UI
-                            'id': alert_doc.id
+                            'date': trip_date,
+                            'id': alert_doc.id,
+                            'triggered': True
                         })
                 else:
-                    # Preis über Ziel - reset notifiedAt
+                    # Preis ist wieder gestiegen -> Reset Notification
                     if notified_at and last_seen_price is not None and last_seen_price <= target_price:
                         update_data['notifiedAt'] = None
 
-                # Speichere Aktualisierung
+                # Speichern
                 alert_doc.reference.update(update_data)
+
+                # UI Update auch ohne Alarm (damit Preis aktuell bleibt)
+                if not should_notify:
+                    self.alertTriggered.emit({
+                        'dest': dest,
+                        'currentPrice': current_price,
+                        'targetPrice': target_price,
+                        'id': alert_doc.id,
+                        'triggered': False
+                    })
+
             else:
-                print(f"   ⚠️ Keine Flüge gefunden für {dest} am {trip_date}")
+                print(f"   ⚠️ Keine Flüge gefunden.")
 
         except Exception as e:
-            print(f"   ⚠️ Fehler bei Preischeck für {dest}: {e}")
+            print(f"   ⚠️ Fehler bei Preischeck: {e}")
 
     def stop(self):
         """Stoppt den Checker-Thread"""
