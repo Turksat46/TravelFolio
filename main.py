@@ -126,11 +126,17 @@ def check_price_alerts():
                         # Verwende einen Standard-Abflugort (z.B. Frankfurt) oder den letzten bekannten
                         origin = alert_data.get('origin', 'FRA')
 
-                        # Datum: morgen
-                        tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+                        # Datum: Verwende gespeichertes Datum oder morgen als Fallback
+                        saved_date = alert_data.get('date')
+                        if saved_date:
+                            search_date = saved_date
+                            print(f"      → Verwende gespeichertes Datum: {search_date}")
+                        else:
+                            search_date = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+                            print(f"      → Kein Datum gespeichert, verwende morgen: {search_date}")
 
                         # Führe Flugsuche durch
-                        flight_data = [FlightData(date=tomorrow, from_airport=origin, to_airport=dest)]
+                        flight_data = [FlightData(date=search_date, from_airport=origin, to_airport=dest)]
                         passengers = Passengers(adults=1, children=0, infants_in_seat=0, infants_on_lap=0)
 
                         result = get_flights(
@@ -344,11 +350,17 @@ def check_alerts():
                 continue
 
             try:
-                # Datum: morgen
-                tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+                # Datum: Verwende gespeichertes Datum oder morgen als Fallback
+                saved_date = alert.get('date')
+                if saved_date:
+                    search_date = saved_date
+                    print(f"      → Verwende gespeichertes Datum: {search_date}")
+                else:
+                    search_date = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+                    print(f"      → Kein Datum gespeichert, verwende morgen: {search_date}")
 
                 # Flugsuche
-                flight_data = [FlightData(date=tomorrow, from_airport=origin, to_airport=dest)]
+                flight_data = [FlightData(date=search_date, from_airport=origin, to_airport=dest)]
                 passengers = Passengers(adults=1, children=0, infants_in_seat=0, infants_on_lap=0)
 
                 result = get_flights(
@@ -371,7 +383,7 @@ def check_alerts():
                             'targetPrice': target_price,
                             'triggered': current_price <= target_price
                         })
-                        print(f"   ✅ Preis gefunden für {dest}: {current_price}€ (Ziel: {target_price}€)")
+                        print(f"   ✅ Preis gefunden für {origin} nach {dest}: {current_price}€ (Ziel: {target_price}€)")
                 else:
                     print(f"   ⚠️ Keine Flüge gefunden für {dest}")
 

@@ -1020,11 +1020,15 @@
             return;
         }
 
-        console.log(`🔔 Erstelle Alert: ${origin} → ${dest}, Zielpreis: ${target}€`);
+        // Hole das Datum aus dem letzten Suchkontext
+        const date = lastSearchContext?.date || null;
+
+        console.log(`🔔 Erstelle Alert: ${origin} → ${dest}, Datum: ${date}, Zielpreis: ${target}€`);
 
         const alertData = {
             dest,
             origin: origin || 'FRA',  // Speichere Origin!
+            date: date,  // ✅ Speichere das Datum!
             targetPrice: target,  // Als Number speichern
             createdAt: Date.now(),
             id: Date.now()
@@ -1367,13 +1371,14 @@
                 : 'text-slate-400';
 
             const origin = a.origin || 'FRA';  // Fallback auf FRA
+            const date = a.date || '—';  // Datum anzeigen
 
             return `
                 <div class="glass-card rounded-3xl p-6 flex flex-col gap-3 enter-pop" style="animation-delay:${idx*50}ms">
                     <div class="flex justify-between items-center">
                         <div>
                             <h3 class="font-black text-white text-xl">${origin} → ${a.dest}</h3>
-                            <p class="text-[9px] text-slate-500 uppercase tracking-wider mt-1">Route</p>
+                            <p class="text-[9px] text-slate-500 uppercase tracking-wider mt-1">${date}</p>
                         </div>
                         <button onclick="deleteAlert(${a.id})" class="w-8 h-8 rounded-full bg-red-500/20 hover:bg-red-500/40 flex items-center justify-center text-red-400 transition">
                             <span class="material-symbols-outlined text-sm">delete</span>

@@ -136,6 +136,9 @@ class PriceAlertChecker(QThread):
         target_price = alert_data.get('targetPrice')
         last_seen_price = alert_data.get('lastSeenPrice')
         notified_at = alert_data.get('notifiedAt')
+        origin = alert_data.get('origin', 'FRA')
+
+        print(f"\n   📋 Desktop: Prüfe Alert {origin} → {dest}")
 
         if not dest or not target_price:
             return
@@ -144,18 +147,27 @@ class PriceAlertChecker(QThread):
         target_price = clean_price(target_price)
         last_seen_price = clean_price(last_seen_price)
 
+        print(f"      → Zielpreis: {target_price}€")
+        print(f"      → Letzter Preis: {last_seen_price}€")
+
         if target_price is None:
             print(f"   ⚠️ Ungültiger Zielpreis für {dest}")
             return
 
         try:
-            origin = alert_data.get('origin', 'FRA')
+            # Datum: Verwende gespeichertes Datum oder morgen als Fallback
+            saved_date = alert_data.get('date')
+            if saved_date:
+                search_date = saved_date
+                print(f"      → Verwende gespeichertes Datum: {search_date}")
+            else:
+                search_date = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+                print(f"      → Kein Datum gespeichert, verwende morgen: {search_date}")
 
-            # Datum: morgen
-            tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+            print(f"      → Suche Flüge: {origin} → {dest} am {search_date}")
 
             # Flugsuche
-            flight_data = [FlightData(date=tomorrow, from_airport=origin, to_airport=dest)]
+            flight_data = [FlightData(date=search_date, from_airport=origin, to_airport=dest)]
             passengers = Passengers(adults=1, children=0, infants_in_seat=0, infants_on_lap=0)
 
             result = get_flights(
@@ -169,6 +181,9 @@ class PriceAlertChecker(QThread):
             if result and result.flights and len(result.flights) > 0:
                 cheapest = min(result.flights, key=lambda f: clean_price(f.price) or float('inf'))
                 current_price = clean_price(cheapest.price)
+
+                print(f"      → API Rohdaten: {cheapest.price}")
+                print(f"      → Bereinigter Preis: {current_price}€")
 
                 if current_price is None:
                     print(f"   ⚠️ Ungültiger Preis von API für {dest}")
@@ -410,19 +425,31 @@ class Bridge(QObject):
             target_price = alert_data.get('targetPrice')
             origin = alert_data.get('origin', 'FRA')
 
+            print(f"🔍 Desktop: Manuelle Prüfung {origin} → {dest}")
+
             if not dest or not target_price:
                 return
 
             # Konvertiere zu float mit Bereinigung
             target_price = clean_price(target_price)
+            print(f"   → Zielpreis: {target_price}€")
+
             if target_price is None:
                 return
 
-            # Datum: morgen
-            tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+            # Datum: Verwende gespeichertes Datum oder morgen als Fallback
+            saved_date = alert_data.get('date')
+            if saved_date:
+                search_date = saved_date
+                print(f"   → Verwende gespeichertes Datum: {search_date}")
+            else:
+                search_date = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+                print(f"   → Kein Datum gespeichert, verwende morgen: {search_date}")
+
+            print(f"   → Suche Flüge: {origin} → {dest} am {search_date}")
 
             # Flugsuche
-            flight_data = [FlightData(date=tomorrow, from_airport=origin, to_airport=dest)]
+            flight_data = [FlightData(date=search_date, from_airport=origin, to_airport=dest)]
             passengers = Passengers(adults=1, children=0, infants_in_seat=0, infants_on_lap=0)
 
             result = get_flights(
@@ -437,8 +464,12 @@ class Bridge(QObject):
                 cheapest = min(result.flights, key=lambda f: clean_price(f.price) or float('inf'))
                 current_price = clean_price(cheapest.price)
 
+                print(f"   → Gefundener Preis: {current_price}€")
+
                 if current_price is None:
                     return
+
+                print(f"   → Sende Signal an Frontend: triggered={current_price <= target_price}")
 
                 self.alertChecked.emit({
                     'id': alert_data.get('id'),
@@ -447,8 +478,10 @@ class Bridge(QObject):
                     'targetPrice': target_price,
                     'triggered': current_price <= target_price
                 })
+            else:
+                print(f"   ⚠️ Keine Flüge gefunden für {origin} → {dest}")
         except Exception as e:
-            print(f"Fehler beim Alert-Check: {e}")
+            print(f"   ❌ Fehler beim Alert-Check: {e}")
 
     # --- FIRESTORE OPERATIONEN (Analog zu main.py) ---
 
@@ -514,8 +547,14 @@ class Bridge(QObject):
 
     @Slot(dict)
     def save_alert(self, alert_data):
+        # Log für Debugging
+        origin = alert_data.get('origin', 'FRA')
+        dest = alert_data.get('dest', '?')
+        target = alert_data.get('targetPrice', '?')
+        print(f"🔔 Desktop: Speichere Alert {origin} → {dest}, Zielpreis: {target}€")
+
         if not db or not self.current_uid:
-            print("Speichere Alarm lokal (kein Login)")
+            print("   → Lokal speichern (kein Login)")
             alert_id = str(alert_data.get('id', datetime.datetime.now().timestamp()))
             return self._save_local_alert(alert_id, alert_data)
 
@@ -524,9 +563,10 @@ class Bridge(QObject):
             doc_ref = db.collection('artifacts').document(self.app_id).collection('users').document(
                 self.current_uid).collection('alerts').document(alert_id)
             doc_ref.set(alert_data)
+            print(f"   ✅ Alert gespeichert in Firestore")
             return True
         except Exception as e:
-            print(f"Firestore Save Alert Error: {e}")
+            print(f"   ❌ Firestore Save Alert Error: {e}")
             return False
 
     @Slot(str)
