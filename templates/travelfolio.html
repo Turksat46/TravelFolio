@@ -1012,24 +1012,33 @@
     }
 
     // Preisalarm hinzufügen (ins Backend)
-    async function addAlertFromResult(dest, inputId) {
+    async function addAlertFromResult(dest, inputId, origin) {
         const inputElement = document.getElementById(inputId);
         const target = parseFloat(inputElement.value);
+
+        // Datum holen
+        const dateValue = document.getElementById('input-start').value;
+
         if (!target || isNaN(target) || target <= 0) {
             showToast('Bitte gültigen Zielpreis eingeben');
             return;
         }
+
+        // Hier bauen wir das Datenpaket für Python
         const alertData = {
-            dest,
-            targetPrice: target,  // Als Number speichern
+            dest: dest,
+            origin: origin, // <--- DAS HAT GEFEHLT! Hier wird der Startflughafen gespeichert.
+            targetPrice: target,
+            date: dateValue,
             createdAt: Date.now(),
             id: Date.now()
         };
+
         priceAlerts.push(alertData);
 
         // Speichere ins Backend
         if (qtChannelReady && window.backend) {
-            console.log('🔔 Qt: Speichere Alert ins Backend');
+            console.log('🔔 Qt: Speichere Alert mit Origin:', origin); // Debugging
             window.backend.save_alert(alertData);
         } else {
             if (currentUser) {
@@ -1045,24 +1054,21 @@
             }
         }
 
-        // Leere Input-Feld
+        // Leere Input-Feld & UI Updates
         inputElement.value = '';
-
-        // Zeige Badge
         document.getElementById('notif-badge').classList.remove('hidden');
-
-        // Rendere Alerts sofort
         renderAlerts();
-
-        // Wechsle zum Trips-View und dann zum Alerts-Tab, damit User den neuen Alert sieht
         switchView('trips');
         setTimeout(() => toggleTripTab('alerts'), 100);
 
         showToast(`🔔 Preisalarm für ${dest} gesetzt`);
 
-        // Starte automatische Überprüfung
+        // Starte sofort die Überprüfung mit den neuen Daten
         checkPriceAlerts();
-    }
+        }
+
+
+
 
     // Preisalarm löschen (aus Backend)
     async function deleteAlert(alertId) {

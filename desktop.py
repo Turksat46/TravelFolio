@@ -131,11 +131,19 @@ class PriceAlertChecker(QThread):
             print(f"Fehler beim Laden der Alerts: {e}")
 
     def check_single_alert(self, alert_doc, alert_data):
+        #def check_single_alert(self, alert_doc, alert_data):
         """Überprüft einen einzelnen Preisalarm"""
         dest = alert_data.get('dest')
         target_price = alert_data.get('targetPrice')
         last_seen_price = alert_data.get('lastSeenPrice')
         notified_at = alert_data.get('notifiedAt')
+
+        # NEU: Das Datum aus dem Alarm holen!
+        # Falls kein Datum gespeichert ist, nehmen wir als Fallback 30 Tage in die Zukunft (statt morgen)
+        trip_date = alert_data.get('date')
+        if not trip_date:
+            trip_date = (datetime.datetime.now() + datetime.timedelta(days=30)).strftime('%Y-%m-%d')
+            print(f"   ⚠️ Kein Datum im Alarm für {dest}, nutze Fallback: {trip_date}")
 
         if not dest or not target_price:
             return
@@ -151,11 +159,10 @@ class PriceAlertChecker(QThread):
         try:
             origin = alert_data.get('origin', 'FRA')
 
-            # Datum: morgen
-            tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+            print(f"🔎 Prüfe Alarm: {origin} -> {dest} am {trip_date}")
 
-            # Flugsuche
-            flight_data = [FlightData(date=tomorrow, from_airport=origin, to_airport=dest)]
+            # Flugsuche mit dem KORREKTEN Datum
+            flight_data = [FlightData(date=trip_date, from_airport=origin, to_airport=dest)]
             passengers = Passengers(adults=1, children=0, infants_in_seat=0, infants_on_lap=0)
 
             result = get_flights(
@@ -167,12 +174,17 @@ class PriceAlertChecker(QThread):
             )
 
             if result and result.flights and len(result.flights) > 0:
+                # Debugging Ausgabe um zu sehen was wirklich zurückkommt
+                # print(f"   Gefundene Preise: {[f.price for f in result.flights]}")
+
                 cheapest = min(result.flights, key=lambda f: clean_price(f.price) or float('inf'))
                 current_price = clean_price(cheapest.price)
 
                 if current_price is None:
                     print(f"   ⚠️ Ungültiger Preis von API für {dest}")
                     return
+
+                print(f"   💰 Aktueller Preis: {current_price}€ (Ziel: {target_price}€)")
 
                 # Aktualisiere lastSeenPrice
                 update_data = {'lastSeenPrice': current_price}
@@ -188,13 +200,14 @@ class PriceAlertChecker(QThread):
                     if should_notify:
                         update_data['notifiedAt'] = datetime.datetime.now().timestamp()
                         update_data['triggeredPrice'] = current_price
-                        print(f"   ✅ Preisalarm ausgelöst: {dest} @ {current_price}€ (Ziel: {target_price}€)")
+                        print(f"   ✅ ALARM AUSGELÖST!")
 
                         # Sende Signal an UI
                         self.alertTriggered.emit({
                             'dest': dest,
                             'currentPrice': current_price,
                             'targetPrice': target_price,
+                            'date': trip_date, # Sende Datum mit ans UI
                             'id': alert_doc.id
                         })
                 else:
@@ -204,6 +217,8 @@ class PriceAlertChecker(QThread):
 
                 # Speichere Aktualisierung
                 alert_doc.reference.update(update_data)
+            else:
+                print(f"   ⚠️ Keine Flüge gefunden für {dest} am {trip_date}")
 
         except Exception as e:
             print(f"   ⚠️ Fehler bei Preischeck für {dest}: {e}")
