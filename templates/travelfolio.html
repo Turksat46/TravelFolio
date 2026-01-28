@@ -931,7 +931,7 @@
                             <button onclick="saveTrip('${cityName}', '${f.airline}', '${price || f.price}', '${originName}')" class="px-3 py-1 bg-cyan-500 text-slate-900 rounded-lg font-black text-[9px] uppercase">Planen</button>
                             <div class="flex items-center gap-2">
                                 <input id="alert-input-${idx}" type="number" placeholder="Ziel" class="search-input !p-1 !text-center !w-16 !text-[10px]">
-                                <button onclick="addAlertFromResult('${cityName}', 'alert-input-${idx}')" class="px-2 py-1 border border-slate-700 rounded-lg text-[9px] font-black">ALARM</button>
+                                <button onclick="addAlertFromResult('${cityName}', 'alert-input-${idx}', '${originName}')" class="px-2 py-1 border border-slate-700 rounded-lg text-[9px] font-black">ALARM</button>
                             </div>
                         </div>
                     </div>
@@ -1012,15 +1012,19 @@
     }
 
     // Preisalarm hinzufügen (ins Backend)
-    async function addAlertFromResult(dest, inputId) {
+    async function addAlertFromResult(dest, inputId, origin) {
         const inputElement = document.getElementById(inputId);
         const target = parseFloat(inputElement.value);
         if (!target || isNaN(target) || target <= 0) {
             showToast('Bitte gültigen Zielpreis eingeben');
             return;
         }
+
+        console.log(`🔔 Erstelle Alert: ${origin} → ${dest}, Zielpreis: ${target}€`);
+
         const alertData = {
             dest,
+            origin: origin || 'FRA',  // Speichere Origin!
             targetPrice: target,  // Als Number speichern
             createdAt: Date.now(),
             id: Date.now()
@@ -1211,6 +1215,7 @@
                 localStorage.setItem('tf_alerts', JSON.stringify(priceAlerts));
             }
         }
+        renderAlerts();
     }
 
     // Überprüfe alle aktiven Preisalarme
@@ -1361,10 +1366,15 @@
                 ? 'text-green-400'
                 : 'text-slate-400';
 
+            const origin = a.origin || 'FRA';  // Fallback auf FRA
+
             return `
                 <div class="glass-card rounded-3xl p-6 flex flex-col gap-3 enter-pop" style="animation-delay:${idx*50}ms">
                     <div class="flex justify-between items-center">
-                        <h3 class="font-black text-white text-xl">${a.dest}</h3>
+                        <div>
+                            <h3 class="font-black text-white text-xl">${origin} → ${a.dest}</h3>
+                            <p class="text-[9px] text-slate-500 uppercase tracking-wider mt-1">Route</p>
+                        </div>
                         <button onclick="deleteAlert(${a.id})" class="w-8 h-8 rounded-full bg-red-500/20 hover:bg-red-500/40 flex items-center justify-center text-red-400 transition">
                             <span class="material-symbols-outlined text-sm">delete</span>
                         </button>
@@ -1447,6 +1457,7 @@
         initWebChannel();
         initThreeJS();
         initFirebase();
+
 
         // Starte periodische Preisalarm-Überprüfung (alle 30 Minuten)
         setInterval(() => {
