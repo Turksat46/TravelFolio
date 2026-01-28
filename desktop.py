@@ -134,6 +134,7 @@ class PriceAlertChecker(QThread):
         #def check_single_alert(self, alert_doc, alert_data):
         """Überprüft einen einzelnen Preisalarm"""
         dest = alert_data.get('dest')
+        origin_raw = alert_data.get('origin', 'FRA')
         target_price = alert_data.get('targetPrice')
         last_seen_price = alert_data.get('lastSeenPrice')
         notified_at = alert_data.get('notifiedAt')
@@ -155,6 +156,28 @@ class PriceAlertChecker(QThread):
         if target_price is None:
             print(f"   ⚠️ Ungültiger Zielpreis für {dest}")
             return
+
+        current_origin = origin_raw
+        if len(current_origin) != 3:
+            try:
+                res = search_airport(current_origin)
+                if res:
+                    # Nimmt den IATA Code aus dem Suchergebnis
+                    current_origin = res[0].value if hasattr(res[0], 'value') else res[0]
+            except Exception:
+                pass  # Fallback auf den Namen, falls Suche fehlschlägt
+
+        # Zielflughafen auflösen (z.B. "Valencia" -> "VLC")
+        current_dest = dest
+        if len(current_dest) != 3:
+            try:
+                res = search_airport(current_dest)
+                if res:
+                    current_dest = res[0].value if hasattr(res[0], 'value') else res[0]
+            except Exception:
+                pass
+
+        print(f"🔎 CHECK: {current_origin} -> {current_dest} am {trip_date} (Ziel: {target_price}€)")
 
         try:
             origin = alert_data.get('origin', 'FRA')
