@@ -8,6 +8,7 @@ import json
 import datetime
 import threading
 import airportsdata
+import re
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from PySide6.QtCore import QUrl, QStandardPaths, Slot, QObject, Signal, QThread
 from PySide6.QtGui import QIcon
@@ -22,6 +23,32 @@ from firebase_admin import credentials, firestore
 
 # Deine Flug-Bibliothek
 from fast_flights import FlightData, Passengers, get_flights, search_airport
+
+# Hilfsfunktion zum Bereinigen von Preisen
+def clean_price(price_value):
+    """
+    Konvertiert Preiswerte zu float, entfernt €-Zeichen, Kommas, etc.
+    Beispiele: '€1024' -> 1024.0, '1,234.56' -> 1234.56, '1024' -> 1024.0
+    """
+    if price_value is None:
+        return None
+
+    # Falls bereits eine Zahl, direkt zurückgeben
+    if isinstance(price_value, (int, float)):
+        return float(price_value)
+
+    # String-Verarbeitung
+    if isinstance(price_value, str):
+        # Entferne Währungssymbole und Leerzeichen
+        cleaned = re.sub(r'[€$£¥\s]', '', price_value)
+        # Entferne Tausendertrennzeichen (Komma)
+        cleaned = cleaned.replace(',', '')
+        try:
+            return float(cleaned)
+        except (ValueError, TypeError):
+            return None
+
+    return None
 
 # --- Http-Server für die Authentifizierung ---
 class TravelFolioHTTPHandler(SimpleHTTPRequestHandler):
@@ -56,6 +83,136 @@ else:
 
 # --- WORKER THREAD ---
 # Das fungiert wie die main mit den Flugsuchen, aber in einem separaten Thread, damit die Seite nicht hängen bleibt
+
+# Preisalarm-Checker für Desktop-App
+class PriceAlertChecker(QThread):
+    """Background-Thread der regelmäßig Preisalarme überprüft"""
+    alertTriggered = Signal(dict)  # Signal wenn ein Alarm ausgelöst wird
+
+    def __init__(self, bridge):
+        super().__init__()
+        self.bridge = bridge
+        self.running = True
+        self.check_interval = 3600  # 1 Stunde in Sekunden
+
+    def run(self):
+        while self.running:
+            try:
+                print("🔔 Desktop: Überprüfe Preisalarme...")
+                self.check_all_alerts()
+            except Exception as e:
+                print(f"❌ Fehler im Preisalarm-Checker: {e}")
+
+            # Warte bis zur nächsten Überprüfung
+            for _ in range(self.check_interval):
+                if not self.running:
+                    break
+                self.msleep(1000)  # 1 Sekunde
+
+    def check_all_alerts(self):
+        """Überprüft alle Alerts des aktuellen Users"""
+        if not db or not self.bridge.current_uid:
+            return
+
+        try:
+            user_ref = db.collection('artifacts').document(self.bridge.app_id).collection(
+                'users').document(self.bridge.current_uid)
+
+            alerts = user_ref.collection('alerts').stream()
+
+            for alert_doc in alerts:
+                if not self.running:
+                    break
+
+                alert_data = alert_doc.to_dict()
+                self.check_single_alert(alert_doc, alert_data)
+
+        except Exception as e:
+            print(f"Fehler beim Laden der Alerts: {e}")
+
+    def check_single_alert(self, alert_doc, alert_data):
+        """Überprüft einen einzelnen Preisalarm"""
+        dest = alert_data.get('dest')
+        target_price = alert_data.get('targetPrice')
+        last_seen_price = alert_data.get('lastSeenPrice')
+        notified_at = alert_data.get('notifiedAt')
+
+        if not dest or not target_price:
+            return
+
+        # Konvertiere zu float mit Bereinigung
+        target_price = clean_price(target_price)
+        last_seen_price = clean_price(last_seen_price)
+
+        if target_price is None:
+            print(f"   ⚠️ Ungültiger Zielpreis für {dest}")
+            return
+
+        try:
+            origin = alert_data.get('origin', 'FRA')
+
+            # Datum: morgen
+            tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+
+            # Flugsuche
+            flight_data = [FlightData(date=tomorrow, from_airport=origin, to_airport=dest)]
+            passengers = Passengers(adults=1, children=0, infants_in_seat=0, infants_on_lap=0)
+
+            result = get_flights(
+                flight_data=flight_data,
+                trip="one-way",
+                seat="economy",
+                passengers=passengers,
+                fetch_mode="local"
+            )
+
+            if result and result.flights and len(result.flights) > 0:
+                cheapest = min(result.flights, key=lambda f: clean_price(f.price) or float('inf'))
+                current_price = clean_price(cheapest.price)
+
+                if current_price is None:
+                    print(f"   ⚠️ Ungültiger Preis von API für {dest}")
+                    return
+
+                # Aktualisiere lastSeenPrice
+                update_data = {'lastSeenPrice': current_price}
+
+                # Prüfe, ob Alarm ausgelöst werden soll
+                if current_price <= target_price:
+                    should_notify = False
+                    if not notified_at:
+                        should_notify = True
+                    elif last_seen_price is not None and last_seen_price > target_price:
+                        should_notify = True
+
+                    if should_notify:
+                        update_data['notifiedAt'] = datetime.datetime.now().timestamp()
+                        update_data['triggeredPrice'] = current_price
+                        print(f"   ✅ Preisalarm ausgelöst: {dest} @ {current_price}€ (Ziel: {target_price}€)")
+
+                        # Sende Signal an UI
+                        self.alertTriggered.emit({
+                            'dest': dest,
+                            'currentPrice': current_price,
+                            'targetPrice': target_price,
+                            'id': alert_doc.id
+                        })
+                else:
+                    # Preis über Ziel - reset notifiedAt
+                    if notified_at and last_seen_price is not None and last_seen_price <= target_price:
+                        update_data['notifiedAt'] = None
+
+                # Speichere Aktualisierung
+                alert_doc.reference.update(update_data)
+
+        except Exception as e:
+            print(f"   ⚠️ Fehler bei Preischeck für {dest}: {e}")
+
+    def stop(self):
+        """Stoppt den Checker-Thread"""
+        self.running = False
+
+
 class SearchWorker(QThread):
     finished = Signal(dict)
 
@@ -150,6 +307,7 @@ class SearchWorker(QThread):
 class Bridge(QObject):
     resultsReady = Signal(dict)
     dataLoaded = Signal(dict)
+    alertChecked = Signal(dict)  # Signal für Preisalarm-Updates
 
     def __init__(self):
         super().__init__()
@@ -170,6 +328,14 @@ class Bridge(QObject):
 
         # Lade gespeicherte Session beim Start
         self._load_saved_session()
+
+        # Preisalarm-Checker initialisieren
+        self.price_checker = None
+        if db:
+            self.price_checker = PriceAlertChecker(self)
+            self.price_checker.alertTriggered.connect(self.alertChecked.emit)
+            self.price_checker.start()
+            print("🔔 Preisalarm-Checker gestartet")
 
     def _load_saved_session(self):
         """Lädt gespeicherte User-Session aus lokaler Datei"""
@@ -235,6 +401,54 @@ class Bridge(QObject):
         self.worker = SearchWorker(origin.upper(), destination.upper(), date, pass_data, self.airports)
         self.worker.finished.connect(self.resultsReady.emit)
         self.worker.start()
+
+    @Slot(dict)
+    def check_alert_price(self, alert_data):
+        """Überprüft einen einzelnen Preisalarm manuell"""
+        try:
+            dest = alert_data.get('dest')
+            target_price = alert_data.get('targetPrice')
+            origin = alert_data.get('origin', 'FRA')
+
+            if not dest or not target_price:
+                return
+
+            # Konvertiere zu float mit Bereinigung
+            target_price = clean_price(target_price)
+            if target_price is None:
+                return
+
+            # Datum: morgen
+            tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+
+            # Flugsuche
+            flight_data = [FlightData(date=tomorrow, from_airport=origin, to_airport=dest)]
+            passengers = Passengers(adults=1, children=0, infants_in_seat=0, infants_on_lap=0)
+
+            result = get_flights(
+                flight_data=flight_data,
+                trip="one-way",
+                seat="economy",
+                passengers=passengers,
+                fetch_mode="local"
+            )
+
+            if result and result.flights and len(result.flights) > 0:
+                cheapest = min(result.flights, key=lambda f: clean_price(f.price) or float('inf'))
+                current_price = clean_price(cheapest.price)
+
+                if current_price is None:
+                    return
+
+                self.alertChecked.emit({
+                    'id': alert_data.get('id'),
+                    'dest': dest,
+                    'currentPrice': current_price,
+                    'targetPrice': target_price,
+                    'triggered': current_price <= target_price
+                })
+        except Exception as e:
+            print(f"Fehler beim Alert-Check: {e}")
 
     # --- FIRESTORE OPERATIONEN (Analog zu main.py) ---
 
@@ -302,6 +516,7 @@ class Bridge(QObject):
     def save_alert(self, alert_data):
         if not db or not self.current_uid:
             print("Speichere Alarm lokal (kein Login)")
+            alert_id = str(alert_data.get('id', datetime.datetime.now().timestamp()))
             return self._save_local_alert(alert_id, alert_data)
 
         try:
@@ -357,6 +572,30 @@ class Bridge(QObject):
         if trip_id in data:
             del data[trip_id]
             with open(path, 'w') as f: json.dump(data, f, indent=2)
+        return True
+
+    def _save_local_alert(self, alert_id, alert_data):
+        path = os.path.join(self.data_dir, "alerts.json")
+        data = []
+        if os.path.exists(path):
+            with open(path, 'r') as f: data = json.load(f)
+        # Füge neuen Alert hinzu oder aktualisiere bestehenden
+        existing_index = next((i for i, a in enumerate(data) if a.get('id') == alert_id), None)
+        if existing_index is not None:
+            data[existing_index] = alert_data
+        else:
+            data.append(alert_data)
+        with open(path, 'w') as f: json.dump(data, f, indent=2)
+        return True
+
+    def _delete_local_alert(self, alert_id):
+        path = os.path.join(self.data_dir, "alerts.json")
+        if not os.path.exists(path): return False
+        with open(path, 'r') as f:
+            data = json.load(f)
+        # Filtere den Alert heraus
+        data = [a for a in data if a.get('id') != alert_id]
+        with open(path, 'w') as f: json.dump(data, f, indent=2)
         return True
 
 

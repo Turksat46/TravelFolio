@@ -223,11 +223,22 @@
                 <button id="login-btn" onclick="handleLogin()" class="glass rounded-full px-5 py-2.5 text-[10px] font-black text-white uppercase tracking-widest border border-white/10 hover:bg-white/10 transition">
                     Login mit Google
                 </button>
-                <button class="relative w-12 h-12 rounded-full bg-white/5 flex items-center justify-center backdrop-blur-md hover:bg-white/10 transition border border-white/10">
+                <button onclick="toggleNotifications()" class="relative w-12 h-12 rounded-full bg-white/5 flex items-center justify-center backdrop-blur-md hover:bg-white/10 transition border border-white/10">
                     <span class="material-symbols-outlined text-slate-200">notifications</span>
                     <span id="notif-badge" class="absolute top-3 right-3 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-900 hidden"></span>
                 </button>
             </div>
+        </div>
+    </div>
+
+    <!-- Benachrichtigungs-Dropdown -->
+    <div id="notification-dropdown" class="absolute top-24 right-8 z-50 w-80 bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl pointer-events-auto hidden">
+        <div class="p-4 border-b border-slate-700 font-bold flex justify-between items-center">
+            <span>Benachrichtigungen</span>
+            <button onclick="clearNotifications()" class="text-xs text-cyan-400 hover:text-cyan-300 uppercase tracking-wider">Löschen</button>
+        </div>
+        <div id="notif-content" class="p-2 max-h-96 overflow-y-auto no-scrollbar">
+            <div class="p-4 text-slate-400 text-sm">Keine neuen Benachrichtigungen</div>
         </div>
     </div>
 
@@ -353,6 +364,24 @@
         "FRA": {lat: 50.03, lon: 8.57}
     };
 
+    // Hilfsfunktion zum Bereinigen von Preisen
+    function cleanPrice(priceValue) {
+        if (priceValue === null || priceValue === undefined) return null;
+
+        // Falls bereits eine Zahl
+        if (typeof priceValue === 'number') return priceValue;
+
+        // String-Verarbeitung
+        if (typeof priceValue === 'string') {
+            // Entferne Währungssymbole, Leerzeichen und Tausendertrennzeichen
+            let cleaned = priceValue.replace(/[€$£¥\s,]/g, '');
+            let num = parseFloat(cleaned);
+            return isNaN(num) ? null : num;
+        }
+
+        return null;
+    }
+
     // --- UNIVERSIELLE BRIDGE (QT / FLASK) ---
     function initWebChannel() {
         if (typeof qt === 'undefined' || typeof QWebChannel === 'undefined') {
@@ -369,13 +398,42 @@
                 if (window.backend.resultsReady) {
                     window.backend.resultsReady.connect((data) => handleSearchResults(data));
                 }
+
+                // Signal für Datenladen vom Backend (Qt Desktop)
+                // Wird aufgerufen wenn backend.load_data() Daten aus Firestore geladen hat
                 if (window.backend.dataLoaded) {
                     window.backend.dataLoaded.connect((data) => {
+                        console.log('📨 Qt Signal empfangen: dataLoaded');
+                        console.log(`   → ${Object.keys(data.trips || {}).length} Trips`);
+                        console.log(`   → ${(data.alerts || []).length} Alerts`);
+
                         trips = data.trips || {};
                         priceAlerts = data.alerts || [];
                         dataReady = true;
                         renderAll();
                         checkSplash();
+                    });
+                }
+
+                // Signal für Preisalarm-Updates (Qt Desktop)
+                if (window.backend.alertChecked) {
+                    window.backend.alertChecked.connect((result) => {
+                        console.log('🔔 Qt Signal: alertChecked', result);
+
+                        // Finde den Alert und aktualisiere IMMER den Preis
+                        const alert = priceAlerts.find(a => a.id === result.id);
+                        if (alert) {
+                            alert.lastSeenPrice = result.currentPrice;
+                            console.log(`   ✅ Preis aktualisiert für ${result.dest}: ${result.currentPrice}€`);
+
+                            // Wenn getriggert, zeige Benachrichtigung
+                            if (result.triggered) {
+                                checkAlertsForDestination(result.dest, result.currentPrice, 'Background-Check');
+                            }
+
+                            // Rendere UI neu
+                            renderAlerts();
+                        }
                     });
                 }
 
@@ -549,33 +607,54 @@
         }
     }
 
-    // --- DATENVERARBEITUNG ---
+    // --- DATENVERARBEITUNG VOM BACKEND ---
+    // Diese Funktion lädt alle Daten vom Backend (Qt Desktop oder Flask Web)
     async function fetchBackendData() {
-        // Im Qt-Modus brauchen wir APIs nicht aufzurufen von Flask
+        console.log('📥 Lade Daten vom Backend...');
+
+        // Im Qt-Modus nutzen wir das Bridge-Objekt
         if (qtChannelReady) {
+            console.log('🔌 Qt-Modus: Rufe window.backend.load_data() auf');
             loadData();
             return;
         }
 
-        // Im Web-Modus (mit Flask) über API laden
+        // Im Web-Modus (Flask) laden wir über REST API
         try {
+            console.log('🌐 Web-Modus: Lade von /api/data');
             const res = await fetch('/api/data');
+
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            }
+
             const data = await res.json();
+
+            // Daten vom Backend in globale Variablen laden
             trips = data.trips || {};
             priceAlerts = data.alerts || [];
+
+            console.log(`✅ Daten geladen: ${Object.keys(trips).length} Trips, ${priceAlerts.length} Alerts`);
+
             dataReady = true;
             renderAll();
             checkSplash();
         } catch (e) {
-            console.warn('API-Aufruf fehlgeschlagen, verwende loadData wegen:', e);
+            console.warn('⚠️ Backend-Aufruf fehlgeschlagen:', e.message);
+            console.log('📂 Fallback auf localStorage');
             loadData();
         }
     }
 
+    // Lädt Daten aus Qt-Backend oder localStorage (Fallback)
     function loadData() {
         if (qtChannelReady && window.backend) {
+            // Qt Desktop: Backend lädt aus Firestore und sendet Signal zurück
+            console.log('🔧 Qt: Triggere backend.load_data()');
             window.backend.load_data();
         } else {
+            // Fallback: Lade aus lokalem Storage (offline oder nicht eingeloggt)
+            console.log('💾 Lade aus localStorage (Fallback)');
             trips = JSON.parse(localStorage.getItem('tf_trips')) || {};
             priceAlerts = JSON.parse(localStorage.getItem('tf_alerts')) || [];
             dataReady = true;
@@ -825,7 +904,18 @@
         area.classList.remove('hidden');
         list.innerHTML = '';
 
+        // Finde günstigsten Preis für Preisalarm-Check
+        let cheapestPrice = null;
+        if (flights && flights.length > 0) {
+            const prices = flights.map(f => cleanPrice(f.price)).filter(p => p !== null);
+            if (prices.length > 0) {
+                cheapestPrice = Math.min(...prices);
+            }
+        }
+
         flights.forEach((f, idx) => {
+            const price = cleanPrice(f.price);
+            const priceDisplay = price !== null ? `${price}€` : f.price;
             list.innerHTML += `
                 <div class="flight-result-card enter-pop" style="animation-delay:${idx*50}ms">
                     <div class="flex items-center gap-4">
@@ -834,11 +924,11 @@
                     </div>
                     <div class="text-right flex items-center gap-4">
                         <div class="min-w-[80px]">
-                            <p class="text-lg font-black text-white">${f.price}€</p>
+                            <p class="text-lg font-black text-white">${priceDisplay}</p>
                             <p class="text-[9px] text-slate-400 uppercase font-bold">aktuell</p>
                         </div>
                         <div class="flex flex-col gap-2">
-                            <button onclick="saveTrip('${cityName}', '${f.airline}', '${f.price}', '${originName}')" class="px-3 py-1 bg-cyan-500 text-slate-900 rounded-lg font-black text-[9px] uppercase">Planen</button>
+                            <button onclick="saveTrip('${cityName}', '${f.airline}', '${price || f.price}', '${originName}')" class="px-3 py-1 bg-cyan-500 text-slate-900 rounded-lg font-black text-[9px] uppercase">Planen</button>
                             <div class="flex items-center gap-2">
                                 <input id="alert-input-${idx}" type="number" placeholder="Ziel" class="search-input !p-1 !text-center !w-16 !text-[10px]">
                                 <button onclick="addAlertFromResult('${cityName}', 'alert-input-${idx}')" class="px-2 py-1 border border-slate-700 rounded-lg text-[9px] font-black">ALARM</button>
@@ -848,9 +938,15 @@
                 </div>
             `;
         });
+
+        // Prüfe Preisalarme für dieses Ziel
+        if (cheapestPrice !== null) {
+            checkAlertsForDestination(cityName, cheapestPrice, `${flights[0]?.airline || 'Flug'} • ${flights[0]?.departure || ''}`);
+        }
     }
 
-    // --- DATENSPEICHERUNG ---
+    // --- DATENSPEICHERUNG INS BACKEND ---
+    // Speichert Trip entweder über Qt-Backend (Desktop) oder Flask API (Web) ins Firestore
     async function saveTrip(dest, airline, price, origin) {
         const id = 't_' + Date.now();
         const coords = cityDatabase[dest] || { lat: 0, lon: 0 };
@@ -866,16 +962,24 @@
         };
 
         trips[id] = tripData;
+
+        // Speichere ins Backend
         if (qtChannelReady && window.backend) {
+            // Qt Desktop: Speichere über Bridge ins Firestore
+            console.log('💾 Qt: Speichere Trip ins Backend');
             window.backend.save_trip(id, tripData);
         } else {
             if (currentUser) {
+                // Web-Modus: Speichere über Flask API ins Firestore
+                console.log('💾 Web: Speichere Trip via /api/trips');
                 await fetch('/api/trips', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id, data: tripData })
                 });
             } else {
+                // Fallback: Nur lokal speichern wenn nicht eingeloggt
+                console.log('💾 Fallback: Speichere Trip nur in localStorage');
                 localStorage.setItem('tf_trips', JSON.stringify(trips));
             }
         }
@@ -886,55 +990,92 @@
         showToast('Trip gespeichert');
     }
 
-    // Reise löschen
+    // Reise löschen (aus Backend)
     async function deleteCurrentTrip() {
         const id = currentDetailKey;
+
+        // Lösche aus Backend
         if (qtChannelReady && window.backend) {
+            console.log('🗑️ Qt: Lösche Trip aus Backend');
             window.backend.delete_trip(id);
         } else {
             if (currentUser) {
+                console.log('🗑️ Web: Lösche Trip via /api/trips');
                 await fetch(`/api/trips/${id}`, { method: 'DELETE' });
             }
         }
+
         delete trips[id];
         renderAll();
         closeDetail();
         showToast('Reise entfernt');
     }
 
-    // Preisalarm hinzufügen
+    // Preisalarm hinzufügen (ins Backend)
     async function addAlertFromResult(dest, inputId) {
-        const target = parseFloat(document.getElementById(inputId).value);
-        if (!target) return;
-        const alertData = { dest, targetPrice: target, createdAt: Date.now(), id: Date.now() };
+        const inputElement = document.getElementById(inputId);
+        const target = parseFloat(inputElement.value);
+        if (!target || isNaN(target) || target <= 0) {
+            showToast('Bitte gültigen Zielpreis eingeben');
+            return;
+        }
+        const alertData = {
+            dest,
+            targetPrice: target,  // Als Number speichern
+            createdAt: Date.now(),
+            id: Date.now()
+        };
         priceAlerts.push(alertData);
 
+        // Speichere ins Backend
         if (qtChannelReady && window.backend) {
+            console.log('🔔 Qt: Speichere Alert ins Backend');
             window.backend.save_alert(alertData);
         } else {
             if (currentUser) {
+                console.log('🔔 Web: Speichere Alert via /api/alerts');
                 await fetch('/api/alerts', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id: alertData.id, data: alertData })
                 });
             } else {
+                console.log('🔔 Fallback: Speichere Alert nur in localStorage');
                 localStorage.setItem('tf_alerts', JSON.stringify(priceAlerts));
             }
         }
+
+        // Leere Input-Feld
+        inputElement.value = '';
+
+        // Zeige Badge
+        document.getElementById('notif-badge').classList.remove('hidden');
+
+        // Rendere Alerts sofort
         renderAlerts();
-        showToast('Alarm gesetzt');
+
+        // Wechsle zum Trips-View und dann zum Alerts-Tab, damit User den neuen Alert sieht
+        switchView('trips');
+        setTimeout(() => toggleTripTab('alerts'), 100);
+
+        showToast(`🔔 Preisalarm für ${dest} gesetzt`);
+
+        // Starte automatische Überprüfung
+        checkPriceAlerts();
     }
 
-    // Preisalarm löschen
+    // Preisalarm löschen (aus Backend)
     async function deleteAlert(alertId) {
         const index = priceAlerts.findIndex(a => a.id === alertId);
         if (index === -1) return;
 
+        // Lösche aus Backend
         if (qtChannelReady && window.backend) {
+            console.log('🗑️ Qt: Lösche Alert aus Backend');
             window.backend.delete_alert(alertId);
         } else {
             if (currentUser) {
+                console.log('🗑️ Web: Lösche Alert via /api/alerts');
                 await fetch(`/api/alerts/${alertId}`, { method: 'DELETE' });
             }
         }
@@ -945,6 +1086,209 @@
         }
         renderAlerts();
         showToast('Alarm entfernt');
+    }
+
+    // --- BENACHRICHTIGUNGEN ---
+    window.__tfNotifs = window.__tfNotifs || [];
+
+    function toggleNotifications() {
+        const dropdown = document.getElementById('notification-dropdown');
+        dropdown.classList.toggle('hidden');
+
+        // Badge ausblenden wenn geöffnet
+        if (!dropdown.classList.contains('hidden')) {
+            document.getElementById('notif-badge').classList.add('hidden');
+        }
+    }
+
+    function clearNotifications() {
+        window.__tfNotifs = [];
+        renderNotifications();
+        document.getElementById('notif-badge').classList.add('hidden');
+    }
+
+    function renderNotifications() {
+        const container = document.getElementById('notif-content');
+        if (!container) return;
+        const notifs = window.__tfNotifs || [];
+
+        if (!notifs.length) {
+            container.innerHTML = '<div class="p-4 text-slate-400 text-sm">Keine neuen Benachrichtigungen</div>';
+            return;
+        }
+
+        container.innerHTML = '';
+        notifs.slice(0, 15).forEach(n => {
+            const date = new Date(n.ts);
+            const time = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+            container.innerHTML += `
+                <div class="p-4 hover:bg-slate-700/50 rounded-xl cursor-pointer transition">
+                    <div class="flex justify-between items-start mb-1">
+                        <span class="text-cyan-400 text-[10px] font-bold uppercase tracking-widest">${n.type === 'price_hit' ? 'Preisalarm' : 'Info'}</span>
+                        <span class="text-slate-500 text-[9px]">${time}</span>
+                    </div>
+                    <p class="text-sm text-slate-200">${n.message}</p>
+                </div>
+            `;
+        });
+    }
+
+    function addNotification(type, message) {
+        const notif = {
+            id: Date.now() + Math.random(),
+            type: type,
+            message: message,
+            ts: Date.now()
+        };
+        window.__tfNotifs.unshift(notif);
+        renderNotifications();
+        document.getElementById('notif-badge').classList.remove('hidden');
+    }
+
+    // Preisalarm: Wenn Preis unter Ziel fällt
+    function notifyPriceHit(alert, currentPrice, contextText) {
+        const targetPrice = cleanPrice(alert.targetPrice);
+        const lastSeenPrice = alert.lastSeenPrice ? cleanPrice(alert.lastSeenPrice) : null;
+
+        if (targetPrice === null) return;
+
+        // Verhindere Duplikate
+        if (alert?.notifiedAt && lastSeenPrice != null && lastSeenPrice <= targetPrice) {
+            return;
+        }
+
+        alert.notifiedAt = Date.now();
+        alert.lastSeenPrice = currentPrice;
+
+        // UI-Benachrichtigung
+        showToast(`🎯 Preisalarm: ${alert.dest} jetzt ${currentPrice}€!`);
+        addNotification('price_hit', `${alert.dest}: ${currentPrice}€ ≤ ${targetPrice}€${contextText ? ' • ' + contextText : ''}`);
+    }
+
+    // Überprüfe Preisalarme für ein spezifisches Ziel
+    function checkAlertsForDestination(dest, currentPrice, contextText) {
+        if (!priceAlerts?.length) return;
+
+        // Sichere Konvertierung zu Number
+        currentPrice = cleanPrice(currentPrice);
+        if (currentPrice === null) return;
+
+        let changed = false;
+        priceAlerts
+            .filter(a => a.dest === dest)
+            .forEach(a => {
+                // Stelle sicher dass targetPrice eine Zahl ist
+                const targetPrice = cleanPrice(a.targetPrice);
+                if (targetPrice === null) return;
+
+                a.lastSeenPrice = currentPrice;
+
+                // Reset notifiedAt wenn Preis wieder über Ziel steigt
+                if (a.notifiedAt && currentPrice > targetPrice) {
+                    a.notifiedAt = null;
+                }
+
+                // Alarm auslösen
+                if (currentPrice <= targetPrice) {
+                    notifyPriceHit(a, currentPrice, contextText);
+                }
+                changed = true;
+            });
+
+        if (changed) {
+            // Speichere aktualisierte Alerts
+            if (qtChannelReady && window.backend) {
+                priceAlerts.forEach(a => window.backend.save_alert(a));
+            } else if (currentUser) {
+                priceAlerts.forEach(a => {
+                    fetch('/api/alerts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: a.id, data: a })
+                    });
+                });
+            } else {
+                localStorage.setItem('tf_alerts', JSON.stringify(priceAlerts));
+            }
+        }
+    }
+
+    // Überprüfe alle aktiven Preisalarme
+    async function checkPriceAlerts() {
+        if (!priceAlerts || priceAlerts.length === 0) return;
+
+        console.log('🔔 Überprüfe Preisalarme...');
+
+        if (qtChannelReady && window.backend) {
+            // Desktop: Nutze Backend-Funktion
+            priceAlerts.forEach(alert => {
+                window.backend.check_alert_price(alert);
+            });
+        } else {
+            // Web: Nutze API
+            try {
+                console.log(`📡 Sende ${priceAlerts.length} Alerts zur Überprüfung...`);
+
+                const response = await fetch('/api/check_alerts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ alerts: priceAlerts })
+                });
+                const data = await response.json();
+
+                console.log('📥 API Response:', data);
+
+                if (data.success && data.results) {
+                    console.log(`   → ${data.results.length} Ergebnisse erhalten`);
+                    let updated = false;
+
+                    data.results.forEach(result => {
+                        console.log(`   → ${result.dest}: ${result.currentPrice}€ (Ziel: ${result.targetPrice}€) - Triggered: ${result.triggered}`);
+
+                        // Finde den Alert im Array
+                        const alert = priceAlerts.find(a => a.id === result.id);
+                        if (alert) {
+                            // Aktualisiere IMMER den lastSeenPrice, nicht nur bei Trigger
+                            alert.lastSeenPrice = result.currentPrice;
+                            updated = true;
+
+                            // Wenn getriggert, zeige Benachrichtigung
+                            if (result.triggered) {
+                                checkAlertsForDestination(result.dest, result.currentPrice, 'Automatische Prüfung');
+                            }
+                        }
+                    });
+
+                    // Wenn Preise aktualisiert wurden, speichere und rendere
+                    if (updated) {
+                        console.log('✅ Preise aktualisiert für', data.results.length, 'Alerts');
+
+                        // Speichere aktualisierte Alerts
+                        if (currentUser) {
+                            // Speichere alle aktualisierten Alerts ins Backend
+                            priceAlerts.forEach(a => {
+                                fetch('/api/alerts', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ id: a.id, data: a })
+                                });
+                            });
+                        } else {
+                            localStorage.setItem('tf_alerts', JSON.stringify(priceAlerts));
+                        }
+
+                        // Rendere UI neu
+                        renderAlerts();
+                    } else {
+                        console.log('⚠️ Keine Updates - keine Ergebnisse vom Backend');
+                    }
+                } else {
+                    console.warn('⚠️ API Response erfolglos oder keine Ergebnisse');
+                }
+            } catch (e) {
+                console.error('❌ Preisalarm-Check fehlgeschlagen:', e);
+            }
+        }
     }
 
     // --- VIEW MANAGEMENT ---
@@ -995,18 +1339,52 @@
     // Preisalarme rendern
     function renderAlerts() {
         const c = document.getElementById('alerts-container');
-        if (!priceAlerts.length) { c.innerHTML = '<div class="col-span-full text-center py-20 text-slate-500 font-bold uppercase text-xs">Keine Alarme</div>'; return; }
-        c.innerHTML = priceAlerts.map(a => `
-            <div class="glass-card rounded-3xl p-6 flex flex-col gap-3">
-                <div class="flex justify-between items-center">
-                    <h3 class="font-black text-white text-xl">${a.dest}</h3>
-                    <button onclick="deleteAlert(${a.id})" class="w-8 h-8 rounded-full bg-red-500/20 hover:bg-red-500/40 flex items-center justify-center text-red-400 transition">
-                        <span class="material-symbols-outlined text-sm">delete</span>
-                    </button>
+        if (!priceAlerts.length) {
+            c.innerHTML = '<div class="col-span-full text-center py-20 text-slate-500 font-bold uppercase text-xs">Keine Alarme</div>';
+            return;
+        }
+
+        // Sortiere nach Erstelldatum (neueste zuerst)
+        const sortedAlerts = [...priceAlerts].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+        c.innerHTML = sortedAlerts.map((a, idx) => {
+            const targetPrice = cleanPrice(a.targetPrice);
+            const lastSeenPrice = cleanPrice(a.lastSeenPrice);
+
+            if (targetPrice === null) return ''; // Überspringe ungültige Alerts
+
+            const lastSeen = (lastSeenPrice !== null) ? `${lastSeenPrice}€` : '—';
+            const status = (lastSeenPrice !== null)
+                ? (lastSeenPrice <= targetPrice ? '✅ Treffer' : '⏳ Warten')
+                : '🔍 Aktiv';
+            const statusColor = (lastSeenPrice !== null && lastSeenPrice <= targetPrice)
+                ? 'text-green-400'
+                : 'text-slate-400';
+
+            return `
+                <div class="glass-card rounded-3xl p-6 flex flex-col gap-3 enter-pop" style="animation-delay:${idx*50}ms">
+                    <div class="flex justify-between items-center">
+                        <h3 class="font-black text-white text-xl">${a.dest}</h3>
+                        <button onclick="deleteAlert(${a.id})" class="w-8 h-8 rounded-full bg-red-500/20 hover:bg-red-500/40 flex items-center justify-center text-red-400 transition">
+                            <span class="material-symbols-outlined text-sm">delete</span>
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="bg-slate-900/50 p-4 rounded-xl border border-white/5">
+                            <p class="text-[10px] text-slate-400 uppercase font-bold">Zielpreis</p>
+                            <p class="text-lg font-black text-cyan-400">≤ ${targetPrice}€</p>
+                        </div>
+                        <div class="bg-slate-900/50 p-4 rounded-xl border border-white/5">
+                            <p class="text-[10px] text-slate-400 uppercase font-bold">Aktuell</p>
+                            <p class="text-lg font-black ${statusColor}">${lastSeen}</p>
+                        </div>
+                    </div>
+                    <div class="text-center">
+                        <span class="text-xs font-bold ${statusColor}">${status}</span>
+                    </div>
                 </div>
-                <div class="bg-slate-900/50 p-4 rounded-xl border border-white/5"><p class="text-[10px] text-slate-400 uppercase font-bold">Zielpreis</p><p class="text-lg font-black text-cyan-400">≤ ${a.targetPrice}€</p></div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
     }
 
     // Detailmodal anzeigen
@@ -1069,6 +1447,14 @@
         initWebChannel();
         initThreeJS();
         initFirebase();
+
+        // Starte periodische Preisalarm-Überprüfung (alle 30 Minuten)
+        setInterval(() => {
+            if (priceAlerts && priceAlerts.length > 0) {
+                console.log('⏰ Periodische Preisalarm-Überprüfung...');
+                checkPriceAlerts();
+            }
+        }, 30 * 60 * 1000); // 30 Minuten
 
         // Raycaster für Globe-Picking
         const ray = new THREE.Raycaster(); const mouse = new THREE.Vector2();
