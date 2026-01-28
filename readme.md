@@ -9,15 +9,19 @@
 </div>
 
 ### WICHTIG
-Dieses Projekt wurde mit Pycharm erstellt (aktuellste Version)         
-Einfach Programm installieren und mit Project from Version Control klonen
+Dieses Projekt wurde mit PyCharm erstellt (aktuellste Version)         
+Einfach PyCharm installieren und mit Project from Version Control klonen
 
-### Wie es funktioniert
+### Wie es funktioniert und welche APIs wir nutzen
 - Wir benutzen die fast-flights-API, die Google Flights scraped und uns somit genaue Informationen liefert wie Preise, Flüge etc.
-- Die UI ist intuitiv und modern dargestellt, sodass jeder Nutzer schnell sieht, wo er mal war und wo er noch hinmöchte
+- Die UI ist intuitiv und modern dargestellt, sodass jeder Nutzer schnell sieht, wo er mal war und wo er noch hinmöchte.
+- Für die Punkte auf der Erde wird die airportsdata-Bibliothek genutzt, die uns die Koordinaten der Flughäfen liefert
+- Die 3D-Globus-Visualisierung wird mit Three.js umgesetzt, welches in der Web-App integriert ist
+- Wir nutzen Flask als Backend-Framework, um die API-Calls zu tätigen und die Daten an das Frontend zu senden (für die Web-App)
+- Für die Desktop-App nutzen wir PyWebView, um die Web-App in einem nativen Fenster darzustellen
 
 ### Wie nutze ich die App?
-- Einfach das Repository klonen und in Pycharm öffnen
+- Einfach das Repository klonen und in PyCharm öffnen
 - Mit dem Befehl ```uv sync``` die Abhängigkeiten installieren
 - Mit dem Befehl ```playwright install``` den Playwright-Browser installieren
 - Ab hier gibt es zwei Möglichkeiten: (Beides findet man oben neben dem Play-Button)
@@ -37,4 +41,5 @@ Nachdem man diese Dateien hinzugefügt hat, sollte das Login funktionieren.
 
 ### Dokumentation
 - Für Fast-Flights findet man die Dokumentation [hier](https://aweirddev.github.io/flights/)
+- Für airportsdata findet man die Dokumentation [hier](https://github.com/mborsetti/airportsdata/blob/main/README.rst)
 

@@ -1,4 +1,10 @@
+# Für den Webbetrieb wird Flask verwendet, um die API bereitzustellen.
+# Einfach `python main.py` ausführen und die Webseite ist unter http://localhost:5000/ erreichbar.
+
+
+
 import flask
+import os
 from flask import Flask, request, render_template, jsonify, make_response
 from fast_flights import FlightData, Passengers, Result, get_flights, search_airport
 
@@ -16,12 +22,13 @@ airports_db = airportsdata.load('IATA')
 print(f" Datenbank geladen ({len(airports_db)} Einträge)")
 
 # Firebase Admin SDK Initialisierung
-# Stelle sicher, dass der Pfad zu deinem Key korrekt ist!
-cred = credentials.Certificate("./firebase-key/travel-e75e6-firebase-adminsdk-fbsvc-7ba67c5552.json")
-firebase_admin.initialize_app(cred)
-db = firestore.client()
+if(os.path.exists("./firebase-key/travel-e75e6-firebase-adminsdk-fbsvc-7ba67c5552.json")):
+    print("Firebase-Schlüssel gefunden und wird geladen.")
+    cred = credentials.Certificate("./firebase-key/travel-e75e6-firebase-adminsdk-fbsvc-7ba67c5552.json")
+    firebase_admin.initialize_app(cred)
+    db = firestore.client()
 
-
+# Falls ein Cookie schon gespeichert ist, soll dieser geladen werden, um den Nutzer angemeldet zu halten
 def get_authenticated_user():
     """Verifiziert das Session-Cookie und gibt die UID zurück"""
     session_cookie = request.cookies.get('session')
@@ -33,12 +40,14 @@ def get_authenticated_user():
     except Exception:
         return None
 
+# --- Routen ---
 
+# Home-Verzeichnis
 @app.route('/')
 def index():
     return render_template('travelfolio.html')
 
-
+# Anmeldung
 @app.route('/login', methods=['POST'])
 def login():
     id_token = request.json.get('idToken')
@@ -58,7 +67,7 @@ def login():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 401
 
-
+# Abmeldung
 @app.route('/logout', methods=['POST'])
 def logout():
     response = make_response(jsonify({'status': 'success'}))
@@ -66,8 +75,8 @@ def logout():
     return response
 
 
-# --- FIRESTORE API ENDPOINTS ---
-
+# --- FIRESTORE API ENDPUNKTE ---
+# Daten abrufen, speichern und löschen für Trips und Alerts
 @app.route('/api/data', methods=['GET'])
 def get_user_data():
     uid = get_authenticated_user()
@@ -85,7 +94,7 @@ def get_user_data():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
+# Reise speichern
 @app.route('/api/trips', methods=['POST'])
 def save_trip():
     uid = get_authenticated_user()
@@ -104,7 +113,7 @@ def save_trip():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
+# Reise löschen
 @app.route('/api/trips/<trip_id>', methods=['DELETE'])
 def delete_trip(trip_id):
     uid = get_authenticated_user()
@@ -119,7 +128,7 @@ def delete_trip(trip_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
+# Preisalarm speichern
 @app.route('/api/alerts', methods=['POST'])
 def save_alert():
     uid = get_authenticated_user()
@@ -138,7 +147,7 @@ def save_alert():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
+# Preisalarm löschen
 @app.route('/api/alerts/<alert_id>', methods=['DELETE'])
 def delete_alert(alert_id):
     uid = get_authenticated_user()
@@ -154,8 +163,8 @@ def delete_alert(alert_id):
         return jsonify({'error': str(e)}), 500
 
 
-# --- FLIGHT SEARCH ---
-
+# --- FLUGSUCHE ---
+# Flug suchen
 @app.route('/api/search', methods=['POST'])
 def search():
     data = request.get_json()

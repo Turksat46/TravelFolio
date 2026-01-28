@@ -1,3 +1,7 @@
+# TravelFolio Desktop Anwendung
+# Nutzt PySide6 für die lokale HTML-Oberfläche
+# Webserver wird NUR für die Authentifizierung benutzt
+
 import sys
 import os
 import json
@@ -19,7 +23,7 @@ from firebase_admin import credentials, firestore
 # Deine Flug-Bibliothek
 from fast_flights import FlightData, Passengers, get_flights, search_airport
 
-# --- EINFACHER HTTP SERVER FÜR DESKTOP ---
+# --- Http-Server für die Authentifizierung ---
 class TravelFolioHTTPHandler(SimpleHTTPRequestHandler):
     """Einfacher HTTP Handler für lokale Dateien"""
     def __init__(self, *args, **kwargs):
@@ -51,6 +55,7 @@ else:
 
 
 # --- WORKER THREAD ---
+# Das fungiert wie die main mit den Flugsuchen, aber in einem separaten Thread, damit die Seite nicht hängen bleibt
 class SearchWorker(QThread):
     finished = Signal(dict)
 
@@ -110,7 +115,7 @@ class SearchWorker(QThread):
                         'duration': flight.duration,
                         'stops': flight.stops,
                     })
-            #Airport coords
+            # Flughafen-Koordinaten holen
             coords = {}
 
             if current_origin in self.airports_db:
@@ -141,6 +146,7 @@ class SearchWorker(QThread):
 
 
 # --- BRIDGE ---
+# Hier werden alle API-Calls vom Frontend zum Backend gemacht, bloß dass es in PySide6 ist
 class Bridge(QObject):
     resultsReady = Signal(dict)
     dataLoaded = Signal(dict)
@@ -174,13 +180,13 @@ class Bridge(QObject):
                     expires = session_data.get('expires')
                     if expires and datetime.datetime.fromisoformat(expires) > datetime.datetime.now():
                         self.current_uid = session_data.get('uid')
-                        print(f"🔐 Gespeicherte Session wiederhergestellt: {self.current_uid}")
+                        print(f"Gespeicherte Session wiederhergestellt: {self.current_uid}")
                         return self.current_uid
                     else:
-                        print("⏰ Session abgelaufen")
+                        print("Session abgelaufen")
                         os.remove(self.session_file)
             except Exception as e:
-                print(f"⚠️ Fehler beim Laden der Session: {e}")
+                print(f"Fehler beim Laden der Session: {e}")
         return None
 
     def _save_session(self, uid, days=5):
@@ -192,13 +198,13 @@ class Bridge(QObject):
         }
         with open(self.session_file, 'w') as f:
             json.dump(session_data, f)
-        print(f"💾 Session gespeichert bis {expires.strftime('%d.%m.%Y %H:%M')}")
+        print(f"Session gespeichert bis {expires.strftime('%d.%m.%Y %H:%M')}")
 
     def _clear_session(self):
         """Löscht gespeicherte Session"""
         if os.path.exists(self.session_file):
             os.remove(self.session_file)
-            print("🗑️ Session gelöscht")
+            print("Session gelöscht")
 
     @Slot(result=str)
     def get_saved_uid(self):
@@ -209,10 +215,10 @@ class Bridge(QObject):
 
     @Slot(str)
     def set_user_auth(self, uid):
-        """Wird aufgerufen, wenn der User sich in der HTML eingeloggt hat"""
+        """Wird aufgerufen, wenn der User sich auf der Seite eingeloggt hat"""
         self.current_uid = uid
         self._save_session(uid)
-        print(f"✅ User authentifiziert: {uid}")
+        print(f"User authentifiziert: {uid}")
         self.load_data()
 
     @Slot()
@@ -243,7 +249,7 @@ class Bridge(QObject):
 
         if not db or not self.current_uid:
             # Fallback auf lokale JSONs wenn kein Firebase/User
-            print("📂 Lade lokale Daten (kein Login)")
+            print("Lade lokale Daten (kein Login)")
             self._load_local_data()
             return
 
@@ -261,7 +267,7 @@ class Bridge(QObject):
             print(f"☁️ Daten aus Firestore geladen für {self.current_uid}: {len(trips)} Trips")
             self.dataLoaded.emit({'trips': trips, 'alerts': alerts})
         except Exception as e:
-            print(f"❌ Firestore Load Error: {e}")
+            print(f"Firestore Load Error: {e}")
             self._load_local_data()
 
     @Slot(str, dict)
@@ -295,7 +301,8 @@ class Bridge(QObject):
     @Slot(dict)
     def save_alert(self, alert_data):
         if not db or not self.current_uid:
-            return False  # Alarme aktuell nur mit Cloud
+            print("Speichere Alarm lokal (kein Login)")
+            return self._save_local_alert(alert_id, alert_data)
 
         try:
             alert_id = str(alert_data.get('id', datetime.datetime.now().timestamp()))
@@ -305,6 +312,19 @@ class Bridge(QObject):
             return True
         except Exception as e:
             print(f"Firestore Save Alert Error: {e}")
+            return False
+
+    @Slot(str)
+    def delete_alert(self, alert_id):
+        if not db or not self.current_uid:
+            return self._delete_local_alert(alert_id)
+        try:
+            doc_ref = db.collection('artifacts').document(self.app_id).collection('users').document(
+                self.current_uid).collection('alerts').document(alert_id)
+            doc_ref.delete()
+            return True
+        except Exception as e:
+            print(f"Firestore Delete Alert Error: {e}")
             return False
 
     # --- INTERNE HILFSMETHODEN FÜR LOKALEN FALLBACK ---
@@ -363,7 +383,7 @@ class PopupWindow(QMainWindow):
 class TravelFolioApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("TravelFolio 3D")
+        self.setWindowTitle("TravelFolio")
         self.setWindowIcon(QIcon("./static/logo.png"))
         self.resize(1280, 800)
 
@@ -377,7 +397,7 @@ class TravelFolioApp(QMainWindow):
         profile.setPersistentStoragePath(storage_path)
         profile.setCachePath(storage_path)
 
-        print(f"📦 Cookie-Speicher: {storage_path}")
+        print(f"Cookie-Speicher: {storage_path}")
 
         self.browser = QWebEngineView()
 
@@ -401,7 +421,7 @@ class TravelFolioApp(QMainWindow):
 
         # Lade von lokalem HTTP-Server (für Firebase Auth)
         self.browser.load(QUrl("http://127.0.0.1:5555/templates/travelfolio.html"))
-        print(f"📄 Lade: http://127.0.0.1:5555/templates/travelfolio.html")
+        print(f"Lade: http://127.0.0.1:5555/templates/travelfolio.html")
 
         self.setCentralWidget(self.browser)
 
@@ -414,7 +434,7 @@ class TravelFolioApp(QMainWindow):
 
     def on_new_window(self, request):
         """Wird aufgerufen, wenn JavaScript window.open() oder ein Popup öffnen möchte"""
-        print(f"🔓 Popup-Request erhalten!")
+        print(f"   Popup-Request erhalten!")
         print(f"   URL: {request.requestedUrl()}")
         print(f"   Destination: {request.destination()}")
 
@@ -432,14 +452,14 @@ class TravelFolioApp(QMainWindow):
         # Cleanup wenn Fenster geschlossen wird
         popup.destroyed.connect(lambda: self.popup_windows.remove(popup) if popup in self.popup_windows else None)
 
-        print("✅ Login-Popup-Fenster erstellt und angezeigt")
+        print("Login-Popup-Fenster erstellt und angezeigt")
 
 
 if __name__ == "__main__":
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
     os.environ["QTWEBENGINE_REMOTE_DEBUGGING"] = "9222"
 
-    print("🚀 Starte TravelFolio Desktop...")
+    print("Starte TravelFolio Desktop...")
 
     # Starte einfachen HTTP-Server für Firebase Auth
     start_simple_http_server(5555)
@@ -448,7 +468,7 @@ if __name__ == "__main__":
     window = TravelFolioApp()
     window.show()
 
-    print("✅ App gestartet")
+    print("App gestartet")
 
     sys.exit(app.exec())
 
